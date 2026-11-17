@@ -1,6 +1,6 @@
 // 서비스워커: 게임 파일을 폰에 저장해 두고 인터넷이 없어도 혼자 하기가 되게 한다.
 // 파일을 바꿔서 배포할 때마다 CACHE_VERSION을 올린다 (그래야 폰이 새 파일을 받음).
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE = `sky-squad-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -14,6 +14,7 @@ const ASSETS = [
   './js/config.js',
   './js/net/api.js',
   './js/net/lobby.js',
+  './js/net/backoff.js',
   './js/net/room.js',
   './js/net/sync.js',
   './js/ui/screens.js',
@@ -34,8 +35,14 @@ const ASSETS = [
   './js/game/sound.js',
 ];
 
+// 새 버전은 받아만 두고 기다림 → 화면에 "새 버전이 있어요 [새로고침]"이 뜨고, 누르면 교체
+// (처음 설치할 때는 기다릴 이전 버전이 없어서 바로 켜짐)
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // 예전 버전 저장분 정리

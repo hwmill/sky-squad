@@ -1,8 +1,8 @@
-// 서버 입구 (Worker): 주소(Origin) 확인, CORS, Lobby로 전달
-// 모든 친구·접속 데이터는 Lobby Durable Object 하나가 관리한다.
+// 서버 입구 (Worker): 주소(Origin) 확인, CORS, Lobby·GameRoom으로 전달
+// 친구·접속 데이터는 Lobby Durable Object 하나가, 게임방은 방마다 GameRoom이 관리한다.
 import { Lobby } from './lobby.js';
 import { GameRoom } from './room.js';
-import { ALLOWED_ORIGINS, ROOM_ID_RE, json, errorJson } from './util.js';
+import { ALLOWED_ORIGINS, ROOM_ID_RE, QUOTA_MESSAGE, json, errorJson } from './util.js';
 
 export { Lobby, GameRoom };
 
@@ -24,6 +24,16 @@ function withCors(res, origin) {
   return out;
 }
 
+// Durable Object 호출 실패: 무료 한도 초과면 안내 문구, 아니면 일반 오류
+// (한도 초과 때 오류 문구의 정확한 형태는 공식 문서에 없어 "limit/exceed/quota" 포함 여부로 판단 — 확인 필요)
+function stubFailure(e, where) {
+  const text = String(e && e.message ? e.message : e);
+  console.error(`${where} 호출 실패`, text);
+  return /limit|exceed|quota/i.test(text)
+    ? errorJson(429, 'quota', QUOTA_MESSAGE)
+    : errorJson(503, 'server_error', '서버에 잠시 문제가 생겼어요. 조금 뒤에 다시 해 주세요.');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -42,13 +52,22 @@ export default {
     const room = url.pathname.match(/^\/ws\/room\/([A-Z0-9]{6})$/);
     if (room) {
       if (!ROOM_ID_RE.test(room[1])) return errorJson(404, 'room_not_found', '방을 찾을 수 없어요.');
-      return env.ROOM.getByName(room[1]).fetch(request);
+      try {
+        return await env.ROOM.getByName(room[1]).fetch(request);
+      } catch (e) {
+        return stubFailure(e, 'GameRoom');
+      }
     }
 
     const isSocket = url.pathname === '/ws/lobby';
     if (isSocket || url.pathname.startsWith('/api/')) {
-      const res = await env.LOBBY.getByName(LOBBY_NAME).fetch(request);
-      return isSocket ? res : withCors(res, origin); // WebSocket 응답(101)은 그대로
+      let res;
+      try {
+        res = await env.LOBBY.getByName(LOBBY_NAME).fetch(request);
+      } catch (e) {
+        res = stubFailure(e, 'Lobby');
+      }
+      return isSocket && res.status === 101 ? res : withCors(res, origin); // WebSocket 응답(101)은 그대로
     }
     return withCors(errorJson(404, 'not_found', '없는 주소예요.'), origin);
   },

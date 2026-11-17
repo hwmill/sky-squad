@@ -34,6 +34,9 @@ export const NETPLAY = {
   INPUT_HZ: 10,
   INTERP_DELAY_MS: 100, // 게스트 화면은 이만큼 과거를 두 스냅샷 사이로 보간해서 그림
   BUFFER: 4,            // 보관할 스냅샷 수
+  GUEST_HOLD_MS: 15000, // 게스트가 끊겨도 자리를 지켜 주는 시간 (서버와 같은 값)
+  HOST_HOLD_MS: 30000,  // 방장이 끊기거나 앱을 내렸을 때 기다리는 시간 (서버와 같은 값)
+  STALE_MS: 3000,       // 게스트: 이 시간 동안 상태가 안 오면 연결이 끊긴 것으로 보고 다시 연결
 };
 
 export const BOMB = { DAMAGE: 50, INVULN: 2, DURATION: 2 };

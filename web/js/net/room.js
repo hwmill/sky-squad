@@ -27,6 +27,10 @@ export function connectRoom(roomId, token, handlers) {
       case 'pause': handlers.onPause?.(); break;
       case 'resume': handlers.onResume?.(); break;
       case 'hostleft': handlers.onHostLeft?.(); break;
+      case 'away': handlers.onAway?.(m.slot); break;        // (방장에게) 게스트 연결 끊김
+      case 'back': handlers.onBack?.(m.slot); break;        // (방장에게) 게스트 돌아옴
+      case 'hostaway': handlers.onHostAway?.(); break;      // (게스트에게) 방장 연결 끊김
+      case 'hostback': handlers.onHostBack?.(); break;      // (게스트에게) 방장 돌아옴
       case 'error': handlers.onError?.(m.error); break;
       default: break;
     }
@@ -43,6 +47,15 @@ export function connectRoom(roomId, token, handlers) {
     close() {
       closedByMe = true;
       try { ws.close(1000, 'bye'); } catch { /* 무시 */ }
+    },
+    // 응답이 끊긴 연결을 버리고 다시 연결할 때: onClose는 부르지 않음 (부르는 쪽이 재연결 처리)
+    drop() {
+      closedByMe = true;
+      try { ws.close(4999, 'stale'); } catch { /* 무시 */ }
+    },
+    // 개발 확인용(?debug=1): 네트워크가 끊긴 것처럼 닫음 (onClose → 재연결 동작 확인)
+    debugDrop() {
+      try { ws.close(4999, 'debug drop'); } catch { /* 무시 */ }
     },
   };
 }

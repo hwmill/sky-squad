@@ -14,7 +14,27 @@ export const LIMITS = {
   HOST_MSG_MAX: 65536,     // 방장 스냅샷 최대 크기 (적 탄이 많으면 수 KB)
   ROOM_EMPTY_TTL_MS: 10 * 60 * 1000, // 아무도 들어오지 않은 방은 10분 뒤 정리
   MAX_PLAYERS: 4,
+  MSG_PER_SEC: 30,         // 연결 하나가 1초에 보낼 수 있는 메시지 수 (넘으면 무시)
+  GUEST_HOLD_MS: 15000,    // 게임 중 게스트가 끊기면 자리 유지 시간
+  HOST_HOLD_MS: 30000,     // 게임 중 방장이 끊기거나 앱을 내렸을 때 기다리는 시간
 };
+
+// 테스트에서만 대기 시간을 짧게 바꿀 수 있게 (env에 값이 없으면 위 기본값)
+export const holdMs = (env, key) => Number(env && env[key]) || LIMITS[key];
+
+export const QUOTA_MESSAGE = '오늘 온라인 사용량을 다 썼어요. 오전 9시 이후에 다시 해 주세요.';
+
+// 연결별 초당 메시지 수 제한 (메모리에만. 절전 후 깨어나면 새로 셈)
+export function createRateLimiter(perSec = LIMITS.MSG_PER_SEC) {
+  const seen = new WeakMap();
+  return (ws) => {
+    const now = Date.now();
+    const r = seen.get(ws);
+    if (!r || now - r.t0 >= 1000) { seen.set(ws, { t0: now, n: 1 }); return true; }
+    r.n++;
+    return r.n <= perSec;
+  };
+}
 
 // 닉네임: 1~8자, 한글·영문·숫자만
 const NICK_RE = /^[가-힣A-Za-z0-9]{1,8}$/;

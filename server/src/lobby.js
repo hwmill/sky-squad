@@ -2,7 +2,7 @@
 // WebSocket은 절전(Hibernation) 방식: 메시지가 없을 때는 실행 시간이 과금되지 않는다.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  LIMITS, INVITE_CODE_RE, USER_ID_RE, ROOM_ID_RE, HttpError, json, errorJson, readJson,
+  LIMITS, INVITE_CODE_RE, USER_ID_RE, ROOM_ID_RE, HttpError, json, errorJson, readJson, createRateLimiter,
   isValidNickname, newUserId, newInviteCode, newRoomId, newToken, sha256Hex,
 } from './util.js';
 
@@ -28,6 +28,7 @@ export class Lobby extends DurableObject {
         PRIMARY KEY (user_id, friend_id)
       );
     `);
+    this.allow = createRateLimiter();
   }
 
   // ------------------------------------------------------------------ REST
@@ -38,6 +39,7 @@ export class Lobby extends DurableObject {
       return await this.route(request, url.pathname);
     } catch (e) {
       if (e instanceof HttpError) return errorJson(e.status, e.code, e.message);
+      console.error('Lobby 요청 처리 오류', request.method, url.pathname, e && e.stack ? e.stack : String(e));
       throw e;
     }
   }
@@ -179,7 +181,16 @@ export class Lobby extends DurableObject {
   }
 
   async webSocketMessage(ws, message) {
-    if (typeof message !== 'string' || message.length > LIMITS.BODY_MAX) return;
+    try {
+      await this.handleMessage(ws, message);
+    } catch (e) {
+      console.error('Lobby 메시지 처리 오류', e && e.stack ? e.stack : String(e));
+    }
+  }
+
+  async handleMessage(ws, message) {
+    // 4KB 초과, 초당 30건 초과는 무시
+    if (typeof message !== 'string' || message.length > LIMITS.BODY_MAX || !this.allow(ws)) return;
     let msg;
     try { msg = JSON.parse(message); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
@@ -221,11 +232,13 @@ export class Lobby extends DurableObject {
   }
 
   async webSocketClose(ws) {
-    this.handleGone(ws);
+    try { this.handleGone(ws); } catch (e) { console.error('Lobby 연결 종료 처리 오류', e && e.stack ? e.stack : String(e)); }
   }
 
-  async webSocketError(ws) {
-    this.handleGone(ws);
+  async webSocketError(ws, error) {
+    // 폰 화면이 꺼지거나 네트워크가 끊길 때도 여기로 옴 → 원인 구분용으로 기록
+    console.warn('Lobby WebSocket 오류(연결 끊김 포함)', error && error.message ? error.message : String(error));
+    try { this.handleGone(ws); } catch (e) { console.error('Lobby 연결 오류 처리 오류', e && e.stack ? e.stack : String(e)); }
   }
 
   // 그 사람의 마지막 연결이 끊겼으면 친구들에게 '접속 끊김' 알림

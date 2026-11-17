@@ -1,6 +1,6 @@
 // 화면 전환: 타이틀, 등록, 친구, 컨티뉴(10초), 일시정지, 결과. index.html의 .screen 요소를 보이고 숨긴다
 const $ = (id) => document.getElementById(id);
-const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result'];
+const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result', 'notice'];
 const TOAST_MS = 3000;
 
 export function showOnly(id) {
@@ -49,6 +49,20 @@ export function showResult({ cleared, score, best, newBest, multi = false }) {
   $('btnAgain').textContent = multi ? '대기실로' : '다시 하기';
   $('btnTitle').textContent = multi ? '나가기' : '처음으로';
   showOnly('result');
+}
+
+// 알림 화면 (방장이 나갔어요 등). 버튼을 누르면 onOk
+export function showNotice(title, text, onOk) {
+  $('noticeTitle').textContent = title;
+  $('noticeText').textContent = text;
+  $('btnNoticeOk').onclick = onOk;
+  showOnly('notice');
+}
+
+// 새 버전 알림 띠
+export function showUpdate(onClick) {
+  $('update').hidden = false;
+  $('btnUpdate').onclick = onClick;
 }
 
 // 화면 아래에 잠깐 뜨는 안내

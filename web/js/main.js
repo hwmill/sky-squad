@@ -10,8 +10,9 @@ import { movePlayer } from './game/player.js';
 import { VIEW, PLAYER, SHOT, STAGE1, NETPLAY } from './game/rules.js';
 import { encodeSnapshot, decodeSnapshot, createGuestView } from './net/sync.js';
 import { connectRoom } from './net/room.js';
+import { backoffDelay } from './net/backoff.js';
 import { api, hasServer } from './net/api.js';
-import { OFFLINE_MESSAGE } from './config.js';
+import { OFFLINE_MESSAGE, NET } from './config.js';
 import * as screens from './ui/screens.js';
 import { createFriends } from './ui/friends.js';
 import { renderRoom, bindRoom, showInvite } from './ui/room.js';
@@ -180,6 +181,7 @@ function startGuestGame() {
     sentX: null,
     sentY: null,
     lastShot: 0,
+    lastSnapAt: performance.now(), // 마지막으로 상태를 받은 시각 (끊김 감지용)
     paused: false,
     ended: false,
     raf: 0,
@@ -191,7 +193,8 @@ function startGuestGame() {
 function onGuestSnapshot(msg) {
   if (!guest || guest.ended) return;
   const s = decodeSnapshot(msg);
-  guest.view.push(s, performance.now());
+  guest.lastSnapAt = performance.now();
+  guest.view.push(s, guest.lastSnapAt);
   renderer.addEvents(s.events);
   sound.handle(s.events, mySlot);
   const p = myPlayer(s.players);
@@ -211,6 +214,11 @@ function onGuestSnapshot(msg) {
 
 function guestFrame(now) {
   if (!guest) return;
+  // 네트워크가 끊겨도 브라우저는 늦게 알아챔 → 상태가 3초간 안 오면 직접 끊고 다시 연결
+  if (room && !room.recon && !guest.paused && now - guest.lastSnapAt > NETPLAY.STALE_MS) {
+    room.conn.drop();
+    reconnect(room);
+  }
   const latest = guest.view.latest;
   const p = latest ? myPlayer(latest.players) : null;
   const alive = Boolean(p && p.lives > 0);
@@ -268,21 +276,98 @@ function joinRoom(roomId) {
   stopGames();
   leaveRoom();
   mode = null;
-  room = { id: roomId, conn: null, mySlot: 0, members: [], invited: new Set(), status: '게임방에 들어가는 중…' };
+  room = { id: roomId, conn: null, mySlot: 0, members: [], invited: new Set(), status: '게임방에 들어가는 중…', recon: null };
+  if (DEBUG) window.__room = room;
   showRoom();
-  const r = room;
-  r.conn = connectRoom(roomId, friends.account.token, {
+  openConn(room);
+}
+
+// 연결 하나 열기. 처리기는 '지금 연결'에서 온 이벤트만 처리 (예전 시도의 연결이 늦게 붙어도 무시)
+function openConn(r) {
+  if (r.conn) r.conn.close(); // 이전 연결·시도는 정리 (onClose 안 부름)
+  const h = roomHandlers(r);
+  const conn = connectRoom(r.id, friends.account.token, h);
+  for (const k of Object.keys(h)) {
+    const fn = h[k];
+    h[k] = (...args) => { if (room === r && r.conn === conn) fn(...args); };
+  }
+  r.conn = conn;
+}
+
+// 연결이 끊겼을 때 서버가 자리를 지켜 주는 시간(게스트 15초·방장 30초) 안에 다시 연결
+const FATAL_CLOSE = {
+  4001: '게임방에 들어갈 수 없어요. (등록 정보 확인 실패)',
+  4003: '다른 화면에서 이 게임방에 들어갔어요.',
+  4004: '방이 꽉 찼어요. (최대 4명)',
+  4005: '이미 게임이 시작된 방이에요.',
+};
+
+function reconnect(r) {
+  if (room !== r) return;
+  if (!r.recon) {
+    const hold = mode === 'host' ? NETPLAY.HOST_HOLD_MS : NETPLAY.GUEST_HOLD_MS;
+    r.recon = { attempt: 0, until: Date.now() + hold, timer: 0 };
+    // 게임 중이면 멈추고 안내
+    if (mode === 'host' && loop && loop.running) loop.pause();
+    if (mode === 'guest' && guest) guest.paused = true;
+    if (mode) screens.showPause('연결이 끊겼어요. 다시 연결하는 중…');
+    else { r.status = '연결이 끊겼어요. 다시 연결하는 중…'; refreshRoom(); }
+  }
+  const rc = r.recon;
+  const left = rc.until - Date.now();
+  if (left <= 0) {
+    exitWithNotice('연결이 끊겼어요', '다시 연결하지 못해서 게임에서 나왔어요. 인터넷 연결을 확인해 주세요.');
+    return;
+  }
+  const delay = Math.min(backoffDelay(rc.attempt++, NET.ROOM_RETRY_BASE_MS, NET.ROOM_RETRY_MAX_MS), left);
+  clearTimeout(rc.timer);
+  rc.timer = setTimeout(() => { if (room === r) openConn(r); }, delay);
+}
+
+// 다시 연결됐을 때 이어서
+function resumeAfterReconnect(r) {
+  clearTimeout(r.recon.timer);
+  r.recon = null;
+  screens.toast('다시 연결됐어요.');
+  if (mode === 'host' && world && loop) {
+    if (!document.hidden) {
+      screens.hideAll();
+      r.conn.send({ t: 'resume' });
+      loop.resume();
+    }
+  } else if (mode === 'guest' && guest) {
+    guest.paused = false;
+    guest.lastSnapAt = performance.now();
+    screens.hideAll();
+  } else {
+    refreshRoom();
+  }
+}
+
+function exitWithNotice(title, text) {
+  stopGames();
+  leaveRoom();
+  mode = null;
+  screens.showNotice(title, text, toTitle);
+  startIdle();
+}
+
+const nickOf = (r, slot) => r.members.find((m) => m.slot === slot)?.nickname || `${slot}P`;
+
+function roomHandlers(r) {
+  return {
     onSeat(slot, members) {
       r.mySlot = slot;
       mySlot = slot;
       r.members = members;
       r.status = '';
+      if (r.recon) resumeAfterReconnect(r);
       refreshRoom();
     },
     onMembers(members) {
       const gone = r.members.filter((m) => !members.some((n) => n.slot === m.slot));
       r.members = members;
-      // 게임 중에 나간 사람의 비행기는 빠짐 (4단계에서 15초 재접속 대기 추가)
+      // 15초 안에 돌아오지 않아 자리에서 빠진 사람의 비행기는 제거
       if (mode === 'host' && world) {
         for (const m of gone) {
           const p = world.players.find((q) => q.slot === m.slot);
@@ -293,6 +378,10 @@ function joinRoom(roomId) {
     },
     onFull() { screens.toast('방이 꽉 찼어요. (최대 4명)'); exitRoom(); },
     onError(err) {
+      if (err === 'started' && r.recon) {
+        exitWithNotice('게임에서 빠졌어요', '연결이 오래 끊겨서 자리가 정리됐어요.');
+        return;
+      }
       screens.toast(err === 'started' ? '이미 게임이 시작된 방이에요.' : '게임방에 들어갈 수 없어요.');
       exitRoom();
     },
@@ -305,13 +394,33 @@ function joinRoom(roomId) {
       screens.showPause('방장이 잠시 자리를 비웠어요. 기다려 주세요…');
     },
     onResume() {
-      if (!guest) return;
+      if (!guest || r.recon) return;
       guest.paused = false;
+      guest.lastSnapAt = performance.now();
       screens.hideAll();
     },
-    onHostLeft() { screens.toast('방장이 나갔어요.'); exitRoom(); },
-    onClose() { if (room === r) { screens.toast('게임방 연결이 끊겼어요.'); exitRoom(); } },
-  });
+    // 방장 연결이 끊김 → 30초 기다림
+    onHostAway() {
+      if (!guest) return;
+      guest.paused = true;
+      screens.showPause('방장 연결이 끊겼어요. 30초 동안 기다릴게요…');
+    },
+    onHostBack() { screens.toast('방장이 돌아왔어요.'); }, // 실제로 다시 움직이는 건 방장의 resume 때
+    // (방장에게) 게스트 연결 끊김·돌아옴
+    onAway(slot) { screens.toast(`${nickOf(r, slot)}님 연결이 끊겼어요. 15초 기다릴게요.`); },
+    onBack(slot) { screens.toast(`${nickOf(r, slot)}님이 돌아왔어요.`); },
+    onHostLeft() {
+      if (room !== r) return;
+      if (r.mySlot === 1) exitWithNotice('게임이 끝났어요', '오래 자리를 비워서 게임방이 닫혔어요.');
+      else exitWithNotice('방장이 나갔어요', '방장이 30초 안에 돌아오지 않아 게임이 끝났어요.');
+    },
+    onClose(code) {
+      if (room !== r) return;
+      if (code === 4006) return; // 방 종료 (hostleft에서 처리)
+      if (FATAL_CLOSE[code]) { exitWithNotice('게임방에서 나왔어요', FATAL_CLOSE[code]); return; }
+      reconnect(r);
+    },
+  };
 }
 
 function showRoom() {
@@ -351,6 +460,7 @@ function leaveRoom() {
   if (!room) return;
   const r = room;
   room = null;
+  if (r.recon) clearTimeout(r.recon.timer);
   if (r.conn) r.conn.close();
 }
 
@@ -389,6 +499,7 @@ function pauseGame() {
 }
 function resumeGame() {
   if (mode === 'guest' || !world || !loop || loop.running) return;
+  if (room && room.recon) return; // 다시 연결되면 자동으로 이어짐
   sound.unlock();
   input.reset();
   screens.hideAll();
@@ -435,8 +546,28 @@ if (isKakaoInApp()) showKakaoGuide(() => friends.start());
 else friends.start();
 
 // PWA: 오프라인 캐시 (서비스워커). 실패해도 게임은 동작
+// 새 버전을 받아 두면 "새 버전이 있어요 [새로고침]" → 누르면 교체 후 다시 열기
 if ('serviceWorker' in navigator) {
+  let updateRequested = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updateRequested) location.reload();
+  });
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => { /* 무시 */ });
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      const offer = (w) => {
+        if (!w || !navigator.serviceWorker.controller) return; // 처음 설치는 안내 없음
+        screens.showUpdate(() => {
+          updateRequested = true;
+          w.postMessage({ type: 'SKIP_WAITING' });
+        });
+      };
+      if (reg.waiting) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(w); });
+      });
+      // 앱을 다시 열 때마다 새 버전 확인
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => { /* 무시 */ });
   });
 }

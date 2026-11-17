@@ -133,6 +133,27 @@ h3 { margin: 20px 0 0; font-size: 16px; color: var(--sub); }
 .slots .tag { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.12); }
 .slots .tag.me { background: var(--accent); color: #06122b; }
 
+/* 4단계: 새 버전 알림 띠 */
+.update {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 20px;
+  background: var(--accent2);
+  color: #2b1400;
+  font-weight: 800;
+  font-size: 14px;
+  z-index: 40;
+  white-space: nowrap;
+}
+.update[hidden] { display: none; }
+.update button.small { background: #2b1400; color: #fff; }
+
 .toast {
   position: fixed;
   left: 50%;

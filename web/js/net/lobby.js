@@ -1,6 +1,7 @@
 // 로비 WebSocket: 친구 접속 표시를 실시간으로 받는다.
 // 연결 후 첫 메시지로 토큰을 보낸다 (URL에는 넣지 않음).
 import { API_BASE, NET } from '../config.js';
+import { backoffDelay } from './backoff.js';
 
 // handlers: { onReady(friends), onPresence(userId, online), onFriend(friend), onUnfriend(userId),
 //             onInvited(from, roomId), onStatus(connected), onAuthFail() }
@@ -9,6 +10,7 @@ export function createLobby(handlers) {
   let token = null;
   let pingTimer = 0;
   let retryTimer = 0;
+  let attempt = 0;  // 연속 실패 횟수 (성공하면 0으로)
   let wanted = false;
 
   function connect(t) {
@@ -38,7 +40,7 @@ export function createLobby(handlers) {
     sock.onmessage = (e) => {
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === 'ready') { handlers.onStatus?.(true); handlers.onReady?.(m.friends || []); }
+      if (m.t === 'ready') { attempt = 0; handlers.onStatus?.(true); handlers.onReady?.(m.friends || []); }
       else if (m.t === 'presence') handlers.onPresence?.(m.userId, m.online);
       else if (m.t === 'friend') handlers.onFriend?.(m.friend);
       else if (m.t === 'unfriend') handlers.onUnfriend?.(m.userId);
@@ -54,13 +56,15 @@ export function createLobby(handlers) {
     sock.onerror = () => { /* onclose에서 처리 */ };
   }
 
+  // 1초 → 2초 → 4초 … 최대 30초
   function scheduleRetry() {
     clearTimeout(retryTimer);
-    if (wanted) retryTimer = setTimeout(open, NET.RECONNECT_MS);
+    if (wanted) retryTimer = setTimeout(open, backoffDelay(attempt++, NET.RECONNECT_BASE_MS, NET.RECONNECT_MAX_MS));
   }
 
   function close() {
     wanted = false;
+    attempt = 0;
     clearTimeout(retryTimer);
     clearInterval(pingTimer);
     if (ws) { try { ws.close(1000, 'bye'); } catch { /* 무시 */ } ws = null; }
