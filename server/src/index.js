@@ -7,6 +7,8 @@ import { ALLOWED_ORIGINS, ROOM_ID_RE, QUOTA_MESSAGE, json, errorJson } from './u
 export { Lobby, GameRoom };
 
 const LOBBY_NAME = 'main';
+// 서버 코드를 바꿀 때마다 올림 → 배포 주소(/)에서 새 코드가 반영됐는지 확인
+const SERVER_VERSION = 5;
 
 function corsHeaders(origin) {
   return {
@@ -41,7 +43,7 @@ export default {
     const allowed = ALLOWED_ORIGINS.includes(origin);
 
     // 상태 확인용 (배포 확인: 브라우저로 열면 {"ok":true})
-    if (url.pathname === '/') return json({ ok: true, name: 'sky-squad-api' });
+    if (url.pathname === '/') return json({ ok: true, name: 'sky-squad-api', version: SERVER_VERSION });
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: allowed ? 204 : 403, headers: allowed ? corsHeaders(origin) : {} });

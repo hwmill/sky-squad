@@ -68,10 +68,28 @@ npx wrangler dev     # 로컬 서버 http://localhost:8787 (화면은 localhost:
 npm test             # API 테스트
 ```
 - Windows에서 실행이 바로 꺼지면 최신 **Microsoft Visual C++ 재배포 패키지(x64)**를 설치하세요.
-- 배포: `npx wrangler login`(처음 한 번) → `npx wrangler deploy`. 나온 주소를 `web/js/config.js`의 `PROD_API_BASE`에 적고 푸시합니다.
+- 배포: **자동** (아래 "서버 자동 배포"). 처음 한 번만 수동으로 `npx wrangler login` → `npx wrangler deploy` 했고, 나온 주소를 `web/js/config.js`의 `PROD_API_BASE`에 적어 두었습니다.
+- 배포 확인: https://sky-squad-api.terry96.workers.dev/ 를 열면 `{"ok":true,...,"version":숫자}`. 서버 코드를 바꿀 때 `server/src/index.js`의 `SERVER_VERSION`을 올리면 반영 여부를 바로 알 수 있습니다.
 - 서버에는 비밀값이 없습니다. 사용자 토큰은 해시로만 저장합니다.
 
-## 배포
+## 서버 자동 배포 (Cloudflare Workers Builds, 처음 한 번 설정)
+`main` 브랜치에 푸시하면 `server/` 폴더가 바뀐 경우에만 Cloudflare가 알아서 테스트하고 배포합니다.
+
+1. Cloudflare 대시보드 → **Workers & Pages** → **sky-squad-api** → **Settings** → **Builds** → **Connect**
+2. GitHub 연결(처음이면 Cloudflare GitHub 앱 설치 → 저장소 `hwmill/sky-squad` 선택)
+3. 설정값
+   | 항목 | 값 |
+   |---|---|
+   | Git branch | `main` |
+   | Root directory | `server` |
+   | Build command | `npm test` (테스트가 실패하면 배포하지 않음) |
+   | Deploy command | `npx wrangler deploy` (기본값) |
+   | Build watch paths (include) | `server/*` |
+   | Enable Preview Builds | 끄기 |
+4. 저장 후 `server/` 코드를 푸시하면 **Deployments**에 빌드가 보입니다. 무료 플랜은 한 달 3,000분, 한 번에 1개씩.
+- Worker 이름(`sky-squad-api`)은 `server/wrangler.jsonc`의 `name`과 같아야 합니다. 다르면 빌드가 실패합니다.
+
+## 화면 배포
 - `main` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/pages.yml`)가 `web/` 폴더를 Pages로 배포합니다.
 - `web/` 파일을 바꿀 때는 `web/sw.js`의 `CACHE_VERSION`을 올려야 폰에 새 버전이 들어갑니다. (앱을 한 번 더 껐다 켜면 반영)
 
