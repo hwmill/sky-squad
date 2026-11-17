@@ -2,19 +2,62 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0b1026">
 <meta name="robots" content="noindex">
+<meta name="description" content="함께 하는 비행기 슈팅">
 <title>sky-squad</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- 0단계: 준비 중 화면. 1단계에서 게임 화면(canvas)으로 바뀐다 -->
-  <main class="ready">
-    <div class="plane" aria-hidden="true"></div>
-    <h1>sky-squad</h1>
-    <p class="sub">함께 하는 비행기 슈팅</p>
-    <p class="status">준비 중이에요</p>
-  </main>
+  <canvas id="game" aria-label="게임 화면"></canvas>
+
+  <!-- 타이틀 -->
+  <section id="title" class="screen" hidden>
+    <div class="card">
+      <h1>sky-squad</h1>
+      <p class="sub">함께 하는 비행기 슈팅</p>
+      <button id="btnSolo" class="primary">혼자 하기</button>
+      <p id="titleBest" class="best"></p>
+      <button id="btnSound" class="ghost"></button>
+      <p class="help">화면을 드래그하면 비행기가 움직여요<br>오른쪽 아래 <b>B</b> 버튼 = 폭탄</p>
+    </div>
+  </section>
+
+  <!-- 컨티뉴 (10초) -->
+  <section id="continue" class="screen dim" hidden>
+    <div class="card">
+      <h2>이어할까요?</h2>
+      <p id="continueCount" class="count">10</p>
+      <button id="btnContinue" class="primary">이어하기</button>
+      <p class="help">이어하면 점수는 0부터 다시 시작해요</p>
+      <button id="btnGiveUp" class="ghost">그만하기</button>
+    </div>
+  </section>
+
+  <!-- 일시정지 (앱을 내렸다가 돌아왔을 때) -->
+  <section id="pause" class="screen dim" hidden>
+    <div class="card">
+      <h2>일시정지</h2>
+      <p class="help">화면을 누르면 계속해요</p>
+    </div>
+  </section>
+
+  <!-- 결과 -->
+  <section id="result" class="screen dim" hidden>
+    <div class="card">
+      <h2 id="resultTitle">게임 오버</h2>
+      <p id="resultScore" class="score">0</p>
+      <p id="resultBest" class="best"></p>
+      <button id="btnAgain" class="primary">다시 하기</button>
+      <button id="btnTitle" class="ghost">처음으로</button>
+    </div>
+  </section>
+
+  <noscript>이 게임은 JavaScript가 필요해요.</noscript>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

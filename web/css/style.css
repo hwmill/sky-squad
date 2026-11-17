@@ -1,10 +1,11 @@
-/* sky-squad 공통 스타일 (0단계: 준비 중 화면) */
+/* sky-squad 화면 스타일. 게임 자체는 canvas에 그리고, 여기는 바깥 여백과 메뉴 화면만 */
 :root {
   --bg: #0b1026;
-  --bg2: #1a2350;
   --text: #eef2ff;
   --sub: #9aa6d6;
   --accent: #4da3ff;
+  --accent2: #ff9b3d;
+  --card: rgba(16, 24, 60, 0.92);
 }
 
 * { box-sizing: border-box; }
@@ -12,53 +13,72 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: radial-gradient(circle at 50% 30%, var(--bg2), var(--bg) 70%);
+  overflow: hidden;
+  background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  font-family: system-ui, -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
-.ready {
-  min-height: 100%;
+body {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px 16px;
+}
+
+/* 게임 화면: 360×640 비율 유지 (크기는 render.js가 정함) */
+#game {
+  display: block;
+  touch-action: none;
+  background: #070b1f;
+}
+
+/* 메뉴 화면들 */
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+.screen[hidden] { display: none; }
+.screen.dim { background: rgba(3, 6, 20, 0.55); }
+
+.card {
+  width: min(320px, 100%);
+  padding: 28px 22px;
+  border-radius: 18px;
+  background: var(--card);
   text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 }
 
-h1 { margin: 16px 0 0; font-size: 40px; letter-spacing: 1px; }
-.sub { margin: 0; color: var(--sub); font-size: 16px; }
-.status { margin-top: 24px; font-size: 18px; color: var(--accent); }
+h1 { margin: 0; font-size: 36px; letter-spacing: 1px; }
+h2 { margin: 0 0 8px; font-size: 26px; }
+.sub { margin: 6px 0 22px; color: var(--sub); }
+.help { margin: 14px 0 0; color: var(--sub); font-size: 13px; line-height: 1.6; }
+.best { margin: 12px 0 0; color: var(--accent2); font-weight: 700; min-height: 1.2em; }
+.count { margin: 6px 0 16px; font-size: 64px; font-weight: 900; color: var(--accent2); }
+.score { margin: 8px 0 0; font-size: 40px; font-weight: 900; }
 
-/* CSS 도형으로 그린 간단한 비행기 (그림 파일 없음) */
-.plane {
-  position: relative;
-  width: 72px;
-  height: 80px;
-  animation: float 2s ease-in-out infinite;
+button {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 800;
+  font-family: inherit;
+  color: var(--text);
+  cursor: pointer;
 }
-.plane::before { /* 동체 */
-  content: '';
-  position: absolute;
-  left: 30px; top: 0;
-  width: 12px; height: 80px;
-  border-radius: 6px 6px 3px 3px;
-  background: var(--accent);
-}
-.plane::after { /* 날개 */
-  content: '';
-  position: absolute;
-  left: 0; top: 30px;
-  width: 72px; height: 16px;
-  border-radius: 8px;
-  background: #2f7fd6;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
+button.primary { background: var(--accent); color: #06122b; }
+button.ghost { background: rgba(255, 255, 255, 0.1); font-size: 15px; font-weight: 600; }
+button:active { transform: scale(0.98); }

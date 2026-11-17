@@ -1,0 +1,9 @@
+{
+  "name": "sky-squad",
+  "private": true,
+  "type": "module",
+  "description": "게임 규칙 테스트용 (web/ 화면은 빌드 도구 없이 그대로 배포)",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

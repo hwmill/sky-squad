@@ -29,10 +29,15 @@ cd web && python -m http.server 8080
 # 서버 로컬 실행
 cd server && npx wrangler dev
 
-# 테스트
-node --test tests/
+# 테스트 (Node 24는 폴더 이름만 주면 파일을 못 찾으므로 파일 패턴으로)
+node --test tests/*.test.js      # 또는 npm test
 cd server && npm test
+
+# 앱 아이콘 다시 만들기 (web/icons/)
+python tools/make_icons.py
 ```
+- 개발 모드: `?debug=1` FPS 표시, `?debug=1&boss=1` 보스 직전부터 시작, 콘솔에서 `window.__world`로 상태 확인
+- `web/` 파일을 바꿔 배포할 때는 `web/sw.js`의 `CACHE_VERSION`을 올리고, 새 파일은 `ASSETS` 목록에 추가한다 (안 하면 폰이 옛 파일을 계속 씀)
 
 ## 반드시 지킬 규칙
 1. 비밀값(토큰, 키)을 코드·커밋·로그·채팅에 넣지 않는다. 서버 비밀값이 생기면 `wrangler secret`, 로컬은 `.dev.vars`(gitignore)를 쓴다.
@@ -55,8 +60,8 @@ cd server && npm test
 - 오류가 나면 추측으로 고치지 말고 로그와 재현 방법을 먼저 정리한다.
 
 ## 현재 상태 / 다음 할 일
-- [x] 0단계: 준비 (폴더 뼈대, Pages 배포) ← 폰에서 Pages 화면 확인 대기
-- [ ] 1단계: 혼자 하기 완성 + 폰 설치
+- [x] 0단계: 준비 (폴더 뼈대, Pages 배포)
+- [x] 1단계: 혼자 하기 완성 + 폰 설치 ← 테스트·PC 헤드리스 확인 완료, 폰 체크리스트 확인 대기
 - [ ] 2단계: 서버 + 친구 등록
 - [ ] 3단계: 게임방 + 2~4인 플레이
 - [ ] 4단계: 안정화
