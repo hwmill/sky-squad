@@ -1,0 +1,16 @@
+{
+  "name": "sky-squad-api",
+  "private": true,
+  "type": "module",
+  "description": "sky-squad 서버 (Cloudflare Worker + Durable Objects)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.4",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.164.0"
+  }
+}

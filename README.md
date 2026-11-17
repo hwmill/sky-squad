@@ -5,7 +5,13 @@
 
 - 게임 주소: https://hwmill.github.io/sky-squad/
 - 상세 설계: [SPEC.md](SPEC.md)
-- 현재 상태: **1단계(혼자 하기)** 완성. 친구·같이 하기는 2~3단계에서 만듭니다.
+- 현재 상태: **2단계(친구 등록)** 완성. 같이 하기는 3단계에서 만듭니다.
+
+## 친구 맺기
+1. 타이틀의 **👥 친구** → 닉네임(1~8자, 한글·영문·숫자)을 정합니다. 실명·전화번호는 받지 않아요.
+2. **친구 초대 링크 보내기**로 카톡에 링크를 보냅니다.
+3. 받은 사람이 링크를 **Chrome으로** 열고 닉네임을 정하면 서로 친구 목록에 뜹니다. (초록 점 = 접속 중)
+4. 예전에 보낸 링크를 못 쓰게 하려면 **초대 링크 새로 만들기**.
 
 ## 폰에 설치하기
 1. 폰의 **Chrome**으로 위 게임 주소를 엽니다. (카카오톡 안에서 열면 설치가 안 될 수 있어요)
@@ -44,6 +50,17 @@ python -m http.server 8080
 ```
 node --test tests/*.test.js
 ```
+
+## 서버 (server/, Cloudflare Worker + Durable Objects)
+```
+cd server
+npm install          # 처음 한 번
+npx wrangler dev     # 로컬 서버 http://localhost:8787 (화면은 localhost:8080에서 자동으로 이 주소 사용)
+npm test             # API 테스트
+```
+- Windows에서 실행이 바로 꺼지면 최신 **Microsoft Visual C++ 재배포 패키지(x64)**를 설치하세요.
+- 배포: `npx wrangler login`(처음 한 번) → `npx wrangler deploy`. 나온 주소를 `web/js/config.js`의 `PROD_API_BASE`에 적고 푸시합니다.
+- 서버에는 비밀값이 없습니다. 사용자 토큰은 해시로만 저장합니다.
 
 ## 배포
 - `main` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/pages.yml`)가 `web/` 폴더를 Pages로 배포합니다.

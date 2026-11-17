@@ -1,0 +1,19 @@
+// sky-squad 서버 설정 (Cloudflare 공식 문서 2026-11-17 확인)
+// - 무료 플랜은 SQLite 방식 Durable Object만 가능 → exports에 storage: "sqlite"
+// - 새 Worker는 migrations 대신 exports 선언을 권장 (둘은 같이 쓸 수 없음)
+// - compatibility_date 2026-04-07 이후: WebSocket 닫기 응답을 런타임이 자동 처리
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sky-squad-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "LOBBY", "class_name": "Lobby" }
+    ]
+  },
+  "exports": {
+    "Lobby": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "observability": { "enabled": true }
+}

@@ -357,3 +357,11 @@ sky-squad/
 5. 카톡 내부 브라우저에서 외부 브라우저로 여는 방식(`kakaotalk://web/openExternal?url=`)이 현재 안드로이드에서 동작하는지
 6. Android Chrome의 PWA 설치 조건 (manifest 필수 항목, 서비스워커 요구사항)
 7. GitHub Pages 하위 경로(`/sky-squad/`)에서 서비스워커 범위(scope) 설정
+
+**확인 결과 (2026-11-17, 공식 문서·실행으로 확인)**
+- 1: WebSocket Hibernation은 `ctx.acceptWebSocket`, `webSocketMessage/Close/Error`, `ws.serializeAttachment`(최대 16,384바이트)로 사용. 무료 플랜 지원 여부는 문서에 따로 적혀 있지 않지만 로컬 실행·테스트는 정상. compatibility_date 2026-04-07 이후면 닫기 응답 자동 처리
+- 2: 무료 플랜은 SQLite DO만 가능. 새 Worker는 `migrations`(new_sqlite_classes) 대신 `exports: { Lobby: { type: "durable-object", storage: "sqlite" } }` 선언을 권장하여 이 방식을 사용 (둘은 같이 쓸 수 없음)
+- 3: "수신 WebSocket 메시지 20건 = 1요청", 송신 메시지는 무과금. 무료 한도에도 같은 비율이 적용되는지는 문서에 명시 없음 → 3단계에서 대시보드로 실측
+- 6·7: 1단계에서 manifest 오류 없음, 서비스워커 범위 `/sky-squad/`로 등록되는 것 확인
+- API 테스트 도구: `@cloudflare/vitest-plugin` + vitest 4.1 이상 (예전 vitest-pool-workers 방식은 문서에서 빠짐)
+- 4·5: 각각 5단계, 실제 폰에서 확인 예정

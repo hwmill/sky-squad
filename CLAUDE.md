@@ -36,6 +36,8 @@ cd server && npm test
 # 앱 아이콘 다시 만들기 (web/icons/)
 python tools/make_icons.py
 ```
+- 서버 테스트는 `@cloudflare/vitest-plugin` + vitest (실제 workerd 안에서 실행, `exports.default.fetch`로 호출). Windows는 최신 VC++ 재배포 패키지 필요
+- DO 선언은 wrangler.jsonc의 `exports`(storage: "sqlite") 방식. `migrations`와 같이 쓸 수 없음
 - 개발 모드: `?debug=1` FPS 표시, `?debug=1&boss=1` 보스 직전부터 시작, 콘솔에서 `window.__world`로 상태 확인
 - `web/` 파일을 바꿔 배포할 때는 `web/sw.js`의 `CACHE_VERSION`을 올리고, 새 파일은 `ASSETS` 목록에 추가한다 (안 하면 폰이 옛 파일을 계속 씀)
 
@@ -61,8 +63,9 @@ python tools/make_icons.py
 
 ## 현재 상태 / 다음 할 일
 - [x] 0단계: 준비 (폴더 뼈대, Pages 배포)
-- [x] 1단계: 혼자 하기 완성 + 폰 설치 ← 테스트·PC 헤드리스 확인 완료, 폰 체크리스트 확인 대기
-- [ ] 2단계: 서버 + 친구 등록
+- [x] 1단계: 혼자 하기 완성 + 폰 설치
+- [x] 2단계: 서버 + 친구 등록 ← 로컬 확인 완료. Worker 배포 후 `web/js/config.js`의 PROD_API_BASE 채우기 대기
+  - `/api/rooms`(방 만들기)는 GameRoom과 함께 3단계에서
 - [ ] 3단계: 게임방 + 2~4인 플레이
 - [ ] 4단계: 안정화
 - [ ] 5단계: 자동 배포

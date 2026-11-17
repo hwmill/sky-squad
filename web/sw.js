@@ -1,6 +1,6 @@
 // 서비스워커: 게임 파일을 폰에 저장해 두고 인터넷이 없어도 혼자 하기가 되게 한다.
 // 파일을 바꿔서 배포할 때마다 CACHE_VERSION을 올린다 (그래야 폰이 새 파일을 받음).
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE = `sky-squad-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -11,7 +11,12 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './js/main.js',
+  './js/config.js',
+  './js/net/api.js',
+  './js/net/lobby.js',
   './js/ui/screens.js',
+  './js/ui/friends.js',
+  './js/ui/install-guide.js',
   './js/game/rules.js',
   './js/game/engine.js',
   './js/game/input.js',

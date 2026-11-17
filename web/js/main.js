@@ -5,6 +5,8 @@ import { createInput } from './game/input.js';
 import { createSound } from './game/sound.js';
 import { STAGE1 } from './game/rules.js';
 import * as screens from './ui/screens.js';
+import { createFriends } from './ui/friends.js';
+import { isKakaoInApp, showKakaoGuide } from './ui/install-guide.js';
 
 const BEST_KEY = 'sky:best';
 const MY_SLOT = 1;
@@ -90,9 +92,15 @@ function finish(w) {
 function toTitle() {
   if (loop) loop.pause();
   world = null;
-  screens.showTitle({ best: loadBest(), soundOn: sound.on });
+  screens.showTitle({ best: loadBest(), soundOn: sound.on, nickname: friends.account?.nickname });
   if (!idleRaf) idleRaf = requestAnimationFrame(idle);
 }
+
+// 온라인 기능 (등록·친구). 서버가 없어도 혼자 하기는 그대로 동작
+const friends = createFriends({
+  onBack: toTitle,
+  onAccountChange: (a) => screens.setNickname(a?.nickname),
+});
 
 // 앱을 내리면 자동 일시정지 (컨티뉴 카운트다운도 멈춤)
 function pauseGame() {
@@ -111,6 +119,7 @@ function resumeGame() {
 
 screens.bindButtons({
   solo: startSolo,
+  friends: () => friends.open(),
   sound: () => { sound.unlock(); screens.setSoundLabel(sound.toggle()); },
   cont: () => { if (world && continueGame(world, MY_SLOT)) screens.hideContinue(); },
   giveUp: () => { if (world) giveUp(world, MY_SLOT); },
@@ -119,7 +128,14 @@ screens.bindButtons({
   toTitle,
 });
 
-document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    pauseGame();
+    friends.pause();
+  } else {
+    friends.resume();
+  }
+});
 window.addEventListener('resize', () => {
   renderer.resize();
   if (world && loop && !loop.running) renderer.draw(world, performance.now(), { slot: MY_SLOT });
@@ -127,6 +143,9 @@ window.addEventListener('resize', () => {
 
 renderer.resize();
 toTitle();
+// 카톡 안 브라우저면 Chrome 안내를 먼저. 그 외에는 초대 링크(?inv=)·첫 등록 처리
+if (isKakaoInApp()) showKakaoGuide(() => friends.start());
+else friends.start();
 
 // PWA: 오프라인 캐시 (서비스워커). 실패해도 게임은 동작
 if ('serviceWorker' in navigator) {
