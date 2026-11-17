@@ -1,6 +1,6 @@
 // 화면 전환: 타이틀, 등록, 친구, 컨티뉴(10초), 일시정지, 결과. index.html의 .screen 요소를 보이고 숨긴다
 const $ = (id) => document.getElementById(id);
-const SCREENS = ['title', 'register', 'friends', 'continue', 'pause', 'result'];
+const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result'];
 const TOAST_MS = 3000;
 
 export function showOnly(id) {
@@ -36,14 +36,18 @@ export function hideContinue() {
   if (!$('continue').hidden) $('continue').hidden = true;
 }
 
-export function showPause() {
+export function showPause(message = '화면을 누르면 계속해요') {
+  $('pauseText').textContent = message;
   showOnly('pause');
 }
 
-export function showResult({ cleared, score, best, newBest }) {
+// multi: 같이 하기 결과 (버튼이 "대기실로 / 나가기"로 바뀜)
+export function showResult({ cleared, score, best, newBest, multi = false }) {
   $('resultTitle').textContent = cleared ? '스테이지 클리어!' : '게임 오버';
   $('resultScore').textContent = score.toLocaleString('ko-KR');
   $('resultBest').textContent = newBest ? '🎉 최고 점수 갱신!' : `최고 점수 ${best.toLocaleString('ko-KR')}`;
+  $('btnAgain').textContent = multi ? '대기실로' : '다시 하기';
+  $('btnTitle').textContent = multi ? '나가기' : '처음으로';
   showOnly('result');
 }
 
@@ -60,6 +64,7 @@ export function toast(message) {
 // 버튼 연결: handlers = { solo, friends, sound, cont, giveUp, resume, again, toTitle }
 export function bindButtons(h) {
   $('btnSolo').onclick = h.solo;
+  $('btnMulti').onclick = h.multi;
   $('btnFriends').onclick = h.friends;
   $('btnSound').onclick = h.sound;
   $('btnContinue').onclick = h.cont;

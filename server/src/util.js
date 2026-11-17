@@ -11,6 +11,9 @@ export const LIMITS = {
   BODY_MAX: 4096,          // 요청 본문·WebSocket 메시지 최대 크기(바이트)
   AUTH_TIMEOUT_MS: 5000,   // WebSocket 연결 후 이 안에 {t:"auth"}가 없으면 끊음
   PING_TIMEOUT_MS: 60000,  // 이 시간 동안 아무 메시지가 없으면 접속 끊김으로 봄 (화면은 25초마다 ping)
+  HOST_MSG_MAX: 65536,     // 방장 스냅샷 최대 크기 (적 탄이 많으면 수 KB)
+  ROOM_EMPTY_TTL_MS: 10 * 60 * 1000, // 아무도 들어오지 않은 방은 10분 뒤 정리
+  MAX_PLAYERS: 4,
 };
 
 // 닉네임: 1~8자, 한글·영문·숫자만
@@ -22,6 +25,7 @@ const ID_ALPHA = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export const CODE_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const INVITE_CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
 export const USER_ID_RE = /^[a-z0-9]{12}$/;
+export const ROOM_ID_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/;
 
 // 치우침 없는 무작위 문자열 (crypto 난수 + 거절 샘플링)
 export function randomString(len, alpha) {
@@ -39,6 +43,7 @@ export function randomString(len, alpha) {
 
 export const newUserId = () => randomString(12, ID_ALPHA);
 export const newInviteCode = () => randomString(8, CODE_ALPHA);
+export const newRoomId = () => randomString(6, CODE_ALPHA);
 
 // 토큰: 무작위 32바이트, base64url
 export function newToken() {

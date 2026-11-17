@@ -18,6 +18,7 @@ export function createPlayer(slot) {
     fireT: 0,
     continueT: 0,   // 목숨 0일 때 이어하기 카운트다운
     spectator: false,
+    spawn: 0,       // 시작 위치로 옮길 때마다 +1 (게스트가 자기 위치를 맞추는 신호)
   };
   placeAtStart(p);
   return p;
@@ -27,9 +28,12 @@ export const isAlive = (p) => p.lives > 0;
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+// 시작·부활 위치: 하단 중앙. 같이 할 때는 자리별로 조금씩 옆으로 (겹치지 않게)
 export function placeAtStart(p) {
-  p.x = VIEW.W / 2;
+  const offset = PLAYER.SLOT_SPREAD[(p.slot - 1) % PLAYER.SLOT_SPREAD.length] || 0;
+  p.x = VIEW.W / 2 + offset;
   p.y = VIEW.H - PLAYER.RESPAWN_FROM_BOTTOM;
+  p.spawn = (p.spawn || 0) + 1;
 }
 
 // input: { dx, dy } 손가락 이동량(상대) 또는 { x, y } 절대 위치(같이 하기 게스트용)

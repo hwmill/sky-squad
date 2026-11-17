@@ -2,8 +2,8 @@
 // WebSocket은 절전(Hibernation) 방식: 메시지가 없을 때는 실행 시간이 과금되지 않는다.
 import { DurableObject } from 'cloudflare:workers';
 import {
-  LIMITS, INVITE_CODE_RE, USER_ID_RE, HttpError, json, errorJson, readJson,
-  isValidNickname, newUserId, newInviteCode, newToken, sha256Hex,
+  LIMITS, INVITE_CODE_RE, USER_ID_RE, ROOM_ID_RE, HttpError, json, errorJson, readJson,
+  isValidNickname, newUserId, newInviteCode, newRoomId, newToken, sha256Hex,
 } from './util.js';
 
 const NICK_ERROR = '닉네임은 1~8자의 한글·영문·숫자만 쓸 수 있어요.';
@@ -44,6 +44,8 @@ export class Lobby extends DurableObject {
 
   async route(request, path) {
     const m = request.method;
+    // 내부 전용: 게임방(GameRoom)이 토큰 주인을 물어봄. Worker 입구는 /internal/을 전달하지 않으므로 밖에서는 못 부름
+    if (m === 'POST' && path === '/internal/whoami') return this.whoami(request);
     if (m === 'POST' && path === '/api/register') return this.register(request);
 
     const me = await this.userFromRequest(request);
@@ -56,7 +58,27 @@ export class Lobby extends DurableObject {
     const del = path.match(/^\/api\/friends\/([^/]+)$/);
     if (m === 'DELETE' && del) return this.unfriend(me, del[1]);
     if (m === 'POST' && path === '/api/invite-code/reset') return this.resetInvite(me);
+    if (m === 'POST' && path === '/api/rooms') return this.createRoom(me);
     return errorJson(404, 'not_found', '없는 주소예요.');
+  }
+
+  async whoami(request) {
+    const body = await readJson(request);
+    const user = await this.userFromToken(body.token);
+    return user ? json({ userId: user.id, nickname: user.nickname }) : errorJson(401, 'unauthorized', '등록 정보가 맞지 않아요.');
+  }
+
+  // 게임방 만들기: 요청한 사람이 1P 방장
+  async createRoom(me) {
+    for (let i = 0; i < 5; i++) {
+      const roomId = newRoomId();
+      const res = await this.env.ROOM.getByName(roomId).fetch('https://room.internal/internal/init', {
+        method: 'POST',
+        body: JSON.stringify({ hostId: me.id }),
+      });
+      if (res.ok) return json({ roomId });
+    }
+    return errorJson(500, 'room_failed', '방을 만들지 못했어요. 잠시 후 다시 해 주세요.');
   }
 
   async register(request) {
@@ -183,7 +205,19 @@ export class Lobby extends DurableObject {
     att.lastSeen = now;
     ws.serializeAttachment(att);
     if (msg.t === 'ping') this.safeSend(ws, { t: 'pong' });
-    // 알 수 없는 종류는 무시 (초대 {t:"invite"}는 3단계에서)
+    else if (msg.t === 'invite') this.relayInvite(ws, att.userId, msg);
+    // 알 수 없는 종류는 무시
+  }
+
+  // 친구에게 게임방 초대 알림 (친구가 아니면 거부)
+  relayInvite(ws, fromId, msg) {
+    const to = typeof msg.to === 'string' ? msg.to : '';
+    const roomId = typeof msg.roomId === 'string' ? msg.roomId : '';
+    if (!USER_ID_RE.test(to) || !ROOM_ID_RE.test(roomId)) return;
+    const isFriend = this.sql.exec('SELECT 1 FROM friends WHERE user_id = ? AND friend_id = ?', fromId, to).toArray().length > 0;
+    if (!isFriend) { this.safeSend(ws, { t: 'error', error: 'not_friend' }); return; }
+    const me = this.sql.exec('SELECT nickname FROM users WHERE id = ?', fromId).toArray()[0];
+    this.sendTo(to, { t: 'invited', from: { userId: fromId, nickname: me ? me.nickname : '' }, roomId });
   }
 
   async webSocketClose(ws) {

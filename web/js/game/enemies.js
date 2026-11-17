@@ -27,6 +27,7 @@ export function spawnEnemy(world, spec) {
   const def = ENEMY[spec.type];
   const hp = scaledHp(def.hp, world.players.length);
   world.enemies.push({
+    id: world.nextId++,
     type: spec.type,
     x: spec.x,
     y: ENEMY.SPAWN_Y,

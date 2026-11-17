@@ -2,7 +2,8 @@
 // 연결 후 첫 메시지로 토큰을 보낸다 (URL에는 넣지 않음).
 import { API_BASE, NET } from '../config.js';
 
-// handlers: { onReady(friends), onPresence(userId, online), onFriend(friend), onUnfriend(userId), onStatus(connected), onAuthFail() }
+// handlers: { onReady(friends), onPresence(userId, online), onFriend(friend), onUnfriend(userId),
+//             onInvited(from, roomId), onStatus(connected), onAuthFail() }
 export function createLobby(handlers) {
   let ws = null;
   let token = null;
@@ -41,6 +42,7 @@ export function createLobby(handlers) {
       else if (m.t === 'presence') handlers.onPresence?.(m.userId, m.online);
       else if (m.t === 'friend') handlers.onFriend?.(m.friend);
       else if (m.t === 'unfriend') handlers.onUnfriend?.(m.userId);
+      else if (m.t === 'invited') handlers.onInvited?.(m.from, m.roomId);
       else if (m.t === 'error' && m.error === 'unauthorized') { wanted = false; handlers.onAuthFail?.(); }
     };
     sock.onclose = () => {
@@ -64,9 +66,17 @@ export function createLobby(handlers) {
     if (ws) { try { ws.close(1000, 'bye'); } catch { /* 무시 */ } ws = null; }
   }
 
+  // 게임방 초대 보내기 등. 연결이 없으면 false
+  function send(msg) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify(msg));
+    return true;
+  }
+
   return {
     connect,
     close,
+    send,
     // 앱을 내렸다가 다시 열 때
     pause() { const t = token; close(); token = t; },
     resume() { if (token) connect(token); },

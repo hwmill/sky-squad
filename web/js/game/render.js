@@ -92,8 +92,9 @@ export function createRenderer(canvas) {
     ctx.restore();
 
     if (world) {
-      drawHud(world, opts.slot || 1, opts.fps);
-      drawBombButton(world.players[(opts.slot || 1) - 1]);
+      const slot = opts.slot || 1;
+      drawHud(world, slot, opts.fps);
+      drawBombButton(world.players.find((q) => q.slot === slot));
       if (world.boss && !world.boss.dead && !world.boss.entering) drawBossBar(world.boss);
     }
     if (warnT > 0) { warnT -= dt; drawWarning(now); }
@@ -356,7 +357,7 @@ export function createRenderer(canvas) {
 
   // ------------------------------------------------------------ HUD
   function drawHud(world, slot, fps) {
-    const p = world.players[slot - 1];
+    const p = world.players.find((q) => q.slot === slot);
     if (!p) return;
     ctx.fillStyle = 'rgba(5,8,25,0.55)';
     ctx.fillRect(0, 0, VIEW.W, DISPLAY.HUD_H);
@@ -385,11 +386,16 @@ export function createRenderer(canvas) {
       ctx.fill();
     }
 
-    // 점수
+    // 점수 (같이 할 때는 개인 점수. 내 자리 색으로 "2P" 표시)
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold 16px ${FONT}`;
     ctx.textAlign = 'right';
     ctx.fillText(p.score.toLocaleString('ko-KR'), VIEW.W - 48, 24);
+    if (world.players.length > 1) {
+      ctx.fillStyle = PLAYER_BODY[(slot - 1) % 4];
+      ctx.font = `bold 11px ${FONT}`;
+      ctx.fillText(`${slot}P`, VIEW.W - 48, 34);
+    }
 
     // 총알 단계
     ctx.fillStyle = POWERUP_COLOR.P;

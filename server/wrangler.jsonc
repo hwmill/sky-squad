@@ -9,11 +9,13 @@
   "compatibility_date": "2026-11-01",
   "durable_objects": {
     "bindings": [
-      { "name": "LOBBY", "class_name": "Lobby" }
+      { "name": "LOBBY", "class_name": "Lobby" },
+      { "name": "ROOM", "class_name": "GameRoom" }
     ]
   },
   "exports": {
-    "Lobby": { "type": "durable-object", "storage": "sqlite" }
+    "Lobby": { "type": "durable-object", "storage": "sqlite" },
+    "GameRoom": { "type": "durable-object", "storage": "sqlite" }
   },
   "observability": { "enabled": true }
 }

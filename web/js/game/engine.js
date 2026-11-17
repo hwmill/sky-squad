@@ -22,10 +22,12 @@ export function makeRng(seed) {
 }
 
 // state: play(진행) / continue(전원 목숨 0, 카운트다운 중 멈춤) / over(게임 오버) / clear(보스 처치)
-export function createWorld({ playerCount = 1, seed = 1, timeline = STAGE1_TIMELINE } = {}) {
-  const players = [];
-  for (let i = 0; i < playerCount; i++) players.push(createPlayer(i + 1));
+// slots: 같이 할 때 자리 번호 목록 (예: [1, 2, 4]). 없으면 1..playerCount
+export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline = STAGE1_TIMELINE } = {}) {
+  const list = slots && slots.length ? slots : Array.from({ length: playerCount }, (_, i) => i + 1);
+  const players = list.map((slot) => createPlayer(slot));
   return {
+    nextId: 1,        // 적마다 붙이는 번호 (게스트 화면 보간용)
     t: 0,
     frame: 0,
     state: 'play',

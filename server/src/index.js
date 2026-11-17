@@ -1,9 +1,10 @@
 // 서버 입구 (Worker): 주소(Origin) 확인, CORS, Lobby로 전달
 // 모든 친구·접속 데이터는 Lobby Durable Object 하나가 관리한다.
 import { Lobby } from './lobby.js';
-import { ALLOWED_ORIGINS, json, errorJson } from './util.js';
+import { GameRoom } from './room.js';
+import { ALLOWED_ORIGINS, ROOM_ID_RE, json, errorJson } from './util.js';
 
-export { Lobby };
+export { Lobby, GameRoom };
 
 const LOBBY_NAME = 'main';
 
@@ -36,6 +37,13 @@ export default {
       return new Response(null, { status: allowed ? 204 : 403, headers: allowed ? corsHeaders(origin) : {} });
     }
     if (!allowed) return errorJson(403, 'origin', '허용되지 않은 주소에서 온 요청이에요.');
+
+    // 게임방 WebSocket: /ws/room/:roomId → 그 방의 GameRoom
+    const room = url.pathname.match(/^\/ws\/room\/([A-Z0-9]{6})$/);
+    if (room) {
+      if (!ROOM_ID_RE.test(room[1])) return errorJson(404, 'room_not_found', '방을 찾을 수 없어요.');
+      return env.ROOM.getByName(room[1]).fetch(request);
+    }
 
     const isSocket = url.pathname === '/ws/lobby';
     if (isSocket || url.pathname.startsWith('/api/')) {

@@ -25,6 +25,15 @@ export const PLAYER = {
   RESPAWN_FROM_BOTTOM: 90, // 시작·부활 위치: 하단 중앙에서 이만큼 위
   BLINK_HZ: 12,            // 무적 깜박임 속도
   KEY_SPEED: 260,          // PC 키보드로 움직일 때 속도 (개발 확인용)
+  SLOT_SPREAD: [0, -60, 60, -120], // 같이 할 때 시작 위치 옆 간격 (1P 가운데, 2P 왼쪽, 3P 오른쪽, 4P 더 왼쪽)
+};
+
+// 같이 하기 통신 (CLAUDE.md 규칙 8: 스냅샷 초당 15회, 입력 초당 10회를 넘기지 않음)
+export const NETPLAY = {
+  SNAPSHOT_HZ: 15,
+  INPUT_HZ: 10,
+  INTERP_DELAY_MS: 100, // 게스트 화면은 이만큼 과거를 두 스냅샷 사이로 보간해서 그림
+  BUFFER: 4,            // 보관할 스냅샷 수
 };
 
 export const BOMB = { DAMAGE: 50, INVULN: 2, DURATION: 2 };

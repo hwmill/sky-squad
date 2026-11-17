@@ -13,7 +13,8 @@ function setLater() { try { localStorage.setItem(LATER_KEY, '1'); } catch { /* �
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // onBack: 타이틀로 / onAccountChange(account|null): 타이틀 인사말 갱신
-export function createFriends({ onBack, onAccountChange }) {
+// onInvited(from, roomId): 친구가 게임방에 초대함 / onFriendsChange(): 친구·접속 상태가 바뀜 (대기실 목록 갱신용)
+export function createFriends({ onBack, onAccountChange, onInvited, onFriendsChange }) {
   let account = loadAccount();
   let pendingInvite = null;
   let regMode = 'register'; // 'register' | 'rename'
@@ -26,6 +27,7 @@ export function createFriends({ onBack, onAccountChange }) {
     onPresence(id, online) { const f = friends.get(id); if (f) { f.online = online; renderList(); } },
     onFriend(f) { friends.set(f.userId, f); renderList(); },
     onUnfriend(id) { friends.delete(id); renderList(); },
+    onInvited(from, roomId) { onInvited?.(from, roomId); },
     onStatus(up) { lobbyUp = up; if (up) restFailed = false; renderStatus(); },
     onAuthFail() {
       // 서버에 내 계정이 없음 (서버 데이터 초기화 등) → 다시 등록하게
@@ -170,6 +172,7 @@ export function createFriends({ onBack, onAccountChange }) {
   }
 
   function renderList() {
+    onFriendsChange?.();
     const list = [...friends.values()].sort((a, b) => (b.online - a.online) || a.nickname.localeCompare(b.nickname, 'ko'));
     $('friendList').innerHTML = list.length
       ? list.map((f) => `<li>
@@ -244,6 +247,11 @@ export function createFriends({ onBack, onAccountChange }) {
     start,
     open,
     get account() { return account; },
+    // 대기실 초대 목록용: 접속 중인 친구 먼저
+    friendList() {
+      return [...friends.values()].sort((a, b) => (b.online - a.online) || a.nickname.localeCompare(b.nickname, 'ko'));
+    },
+    invite(userId, roomId) { return lobby.send({ t: 'invite', to: userId, roomId }); },
     // 앱을 내리면 연결을 끊어 친구에게 '접속 끊김'으로 보이게, 돌아오면 다시 연결
     pause() { lobby.pause(); },
     resume() { if (account && hasServer()) lobby.resume(); },

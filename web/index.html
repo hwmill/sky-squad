@@ -22,6 +22,7 @@
       <p class="sub">함께 하는 비행기 슈팅</p>
       <p id="titleHello" class="hello"></p>
       <button id="btnSolo" class="primary">혼자 하기</button>
+      <button id="btnMulti" class="primary alt">같이 하기</button>
       <button id="btnFriends" class="secondary">👥 친구</button>
       <p id="titleBest" class="best"></p>
       <button id="btnSound" class="ghost"></button>
@@ -56,6 +57,21 @@
     </div>
   </section>
 
+  <!-- 대기실 (같이 하기) -->
+  <section id="room" class="screen" hidden>
+    <div class="card wide">
+      <h2>대기실</h2>
+      <ul id="slots" class="slots"></ul>
+      <p id="roomStatus" class="help"></p>
+      <button id="btnStart" class="primary" hidden>시작</button>
+      <div id="roomInviteBox" hidden>
+        <h3>친구 초대</h3>
+        <ul id="roomFriends" class="flist"></ul>
+      </div>
+      <button id="btnLeaveRoom" class="ghost">나가기</button>
+    </div>
+  </section>
+
   <!-- 컨티뉴 (10초) -->
   <section id="continue" class="screen dim" hidden>
     <div class="card">
@@ -71,7 +87,7 @@
   <section id="pause" class="screen dim" hidden>
     <div class="card">
       <h2>일시정지</h2>
-      <p class="help">화면을 누르면 계속해요</p>
+      <p id="pauseText" class="help">화면을 누르면 계속해요</p>
     </div>
   </section>
 
@@ -94,6 +110,16 @@
       <button id="btnOpenChrome" class="primary">Chrome으로 열기</button>
       <p class="help">안 열리면: 오른쪽 아래 <b>⋮</b> → <b>다른 브라우저로 열기</b></p>
       <button id="btnStayKakao" class="ghost">그냥 여기서 할게요</button>
+    </div>
+  </section>
+
+  <!-- 게임방 초대 알림 -->
+  <section id="invite" class="screen dim top" hidden>
+    <div class="card">
+      <h2>✈️ 같이 하자!</h2>
+      <p id="inviteText" class="help"></p>
+      <button id="btnInviteAccept" class="primary">같이 하기</button>
+      <button id="btnInviteDecline" class="ghost">다음에</button>
     </div>
   </section>
 
