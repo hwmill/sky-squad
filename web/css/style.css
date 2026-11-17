@@ -1,0 +1,64 @@
+/* sky-squad 공통 스타일 (0단계: 준비 중 화면) */
+:root {
+  --bg: #0b1026;
+  --bg2: #1a2350;
+  --text: #eef2ff;
+  --sub: #9aa6d6;
+  --accent: #4da3ff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(circle at 50% 30%, var(--bg2), var(--bg) 70%);
+  color: var(--text);
+  font-family: -apple-system, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ready {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+h1 { margin: 16px 0 0; font-size: 40px; letter-spacing: 1px; }
+.sub { margin: 0; color: var(--sub); font-size: 16px; }
+.status { margin-top: 24px; font-size: 18px; color: var(--accent); }
+
+/* CSS 도형으로 그린 간단한 비행기 (그림 파일 없음) */
+.plane {
+  position: relative;
+  width: 72px;
+  height: 80px;
+  animation: float 2s ease-in-out infinite;
+}
+.plane::before { /* 동체 */
+  content: '';
+  position: absolute;
+  left: 30px; top: 0;
+  width: 12px; height: 80px;
+  border-radius: 6px 6px 3px 3px;
+  background: var(--accent);
+}
+.plane::after { /* 날개 */
+  content: '';
+  position: absolute;
+  left: 0; top: 30px;
+  width: 72px; height: 16px;
+  border-radius: 8px;
+  background: #2f7fd6;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}

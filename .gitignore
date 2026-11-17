@@ -1,0 +1,14 @@
+# 비밀값 (로컬 개발용 wrangler 변수)
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# 도구가 만드는 폴더
+node_modules/
+.wrangler/
+
+# 편집기·OS
+.vscode/
+.DS_Store
+Thumbs.db
