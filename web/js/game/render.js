@@ -1,11 +1,13 @@
 // 그리기 전용. 게임 상태(world)를 읽기만 하고 바꾸지 않는다.
 // 그림 파일 없이 Canvas 도형으로 직접 그린다.
-import { VIEW, DISPLAY, PLAYER, SHOT, ENEMY_SHOT, POWERUP } from './rules.js';
+// 캐릭터·적 그림은 sprites.js (SPEC-v2 6단계)
+import { VIEW, DISPLAY, PLAYER, ENEMY_SHOT, POWERUP } from './rules.js';
 import { bombButtonCenter } from './input.js';
+import {
+  drawPlayer, drawPlayerIcon, drawHitDot, drawEnemy, drawBoss as drawBossSprite, drawStarShot, drawPop,
+  playerChar, ENEMY_SPRITE, BOSS_CHARS, RAINBOW,
+} from './sprites.js';
 
-// 1P 파랑, 2P 빨강, 3P 초록, 4P 노랑
-const PLAYER_BODY = ['#4da3ff', '#ff5b5b', '#5fd068', '#ffd23f'];
-const PLAYER_WING = ['#2a6fd1', '#c63b3b', '#3a9c49', '#c9a21c'];
 const POWERUP_COLOR = { P: '#ff9b3d', B: '#4da3ff', '1UP': '#5fd068' };
 const FONT = 'system-ui, -apple-system, "Noto Sans KR", sans-serif';
 const MAX_SPARKS = 400;
@@ -19,6 +21,8 @@ export function createRenderer(canvas) {
   let shakeT = 0;   // 피격 흔들림
   const sparks = [];
   const rings = [];
+  const pops = [];          // "뿅" 효과
+  const tilts = new Map();  // 자리별 기울기 (그림 전용, 계산에는 영향 없음)
   const stars = makeStars();
 
   const view = {
@@ -43,7 +47,10 @@ export function createRenderer(canvas) {
   function addEvents(events) {
     for (const ev of events) {
       switch (ev.type) {
-        case 'explode': burst(ev.x, ev.y, ev.size === 2 ? 26 : 12, ev.size === 2 ? 160 : 110, '#ffb347'); break;
+        case 'explode':
+          burst(ev.x, ev.y, ev.size === 2 ? 14 : 6, ev.size === 2 ? 140 : 100, '#ffe066');
+          if (pops.length < 40) pops.push({ x: ev.x, y: ev.y, t: 0, big: ev.size === 2 });
+          break;
         case 'hit': burst(ev.x, ev.y, 30, 180, '#ffffff'); shakeT = 0.3; break;
         case 'bomb': flashT = 0.35; rings.push({ x: ev.x, y: ev.y, t: 0 }); break;
         case 'bossDown': burst(ev.x, ev.y, 80, 260, '#ffd23f'); flashT = 0.5; shakeT = 0.6; break;
@@ -82,9 +89,9 @@ export function createRenderer(canvas) {
     drawBackground(now, frozen);
     if (world) {
       drawPowerups(world);
-      drawEnemies(world);
+      drawEnemies(world, now);
       if (world.boss && !world.boss.dead) drawBoss(world.boss, now);
-      drawShots(world);
+      drawShots(world, now, opts.slot || 1);
       drawPlayers(world, now);
       drawEnemyShots(world);
     }
@@ -130,65 +137,41 @@ export function createRenderer(canvas) {
     }
   }
 
-  // ------------------------------------------------------------ 플레이어
-  function drawJet(x, y, slot, now, alpha = 1) {
-    const i = (slot - 1) % 4;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(x, y);
-    // 엔진 불꽃
-    const flick = 4 + Math.sin(now / 25) * 3;
-    ctx.fillStyle = '#ffb347';
-    ctx.beginPath();
-    ctx.moveTo(-4, 12); ctx.lineTo(0, 18 + flick); ctx.lineTo(4, 12);
-    ctx.fill();
-    // 날개
-    ctx.fillStyle = PLAYER_WING[i];
-    ctx.beginPath();
-    ctx.moveTo(-17, 9); ctx.lineTo(0, -4); ctx.lineTo(17, 9); ctx.lineTo(15, 13); ctx.lineTo(0, 8); ctx.lineTo(-15, 13);
-    ctx.closePath();
-    ctx.fill();
-    // 꼬리 날개
-    ctx.beginPath();
-    ctx.moveTo(-7, 14); ctx.lineTo(0, 9); ctx.lineTo(7, 14); ctx.lineTo(0, 13);
-    ctx.closePath();
-    ctx.fill();
-    // 동체
-    ctx.fillStyle = PLAYER_BODY[i];
-    ctx.beginPath();
-    ctx.moveTo(0, -19); ctx.lineTo(5, -7); ctx.lineTo(5, 13); ctx.lineTo(-5, 13); ctx.lineTo(-5, -7);
-    ctx.closePath();
-    ctx.fill();
-    // 조종석
-    ctx.fillStyle = '#dff4ff';
-    ctx.beginPath();
-    ctx.ellipse(0, -6, 2.6, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+  // ------------------------------------------------------------ 플레이어 (sprites.js의 구름 요정)
+  // 이동 방향으로 살짝 기울기: 직전 위치와 비교 (그림 전용 상태)
+  function tiltOf(p) {
+    const o = tilts.get(p.slot) || { x: p.x, v: 0 };
+    const target = Math.max(-1, Math.min(1, (p.x - o.x) / 3));
+    o.v += (target - o.v) * 0.2;
+    o.x = p.x;
+    tilts.set(p.slot, o);
+    return o.v;
   }
 
   function drawPlayers(world, now) {
     for (const p of world.players) {
       if (p.lives <= 0) continue;
+      const tilt = tiltOf(p);
       // 무적 중 깜박임
       if (p.invuln > 0 && Math.floor(p.invuln * PLAYER.BLINK_HZ) % 2 === 0) continue;
-      drawJet(p.x, p.y, p.slot, now);
-      // 실제 피격 판정 위치 (작은 점)
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, PLAYER.HITBOX_R - 1, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      drawPlayer(ctx, p.slot, { t: now / 1000 + p.slot * 0.37, tilt, bombing: p.bombT > 0 });
+      drawHitDot(ctx, PLAYER.HITBOX_R - 1); // 실제 피격 판정 위치 (그림보다 훨씬 작음)
+      ctx.restore();
     }
   }
 
   // ------------------------------------------------------------ 총알
-  function drawShots(world) {
-    ctx.fillStyle = '#9fe6ff';
+  // 별 총알: 쏜 사람의 총알 단계에 따라 색이 바뀜 (게스트 화면은 주인 정보가 없어 내 단계 색)
+  function drawShots(world, now, mySlot) {
+    const t = now / 1000;
+    const powerOf = new Map(world.players.map((p) => [p.slot, p.power]));
+    const myPower = powerOf.get(mySlot) || 1;
     for (const s of world.shots.list) {
       ctx.save();
       ctx.translate(s.x, s.y);
-      ctx.rotate(Math.atan2(s.vx, -s.vy));
-      ctx.fillRect(-1.5, -SHOT.R * 2, 3, SHOT.R * 3);
+      drawStarShot(ctx, powerOf.get(s.owner) || myPower, t);
       ctx.restore();
     }
   }
@@ -206,83 +189,30 @@ export function createRenderer(canvas) {
     ctx.fill();
   }
 
-  // ------------------------------------------------------------ 적
-  function drawEnemies(world) {
-    for (const e of world.enemies) {
+  // ------------------------------------------------------------ 적 (sprites.js의 심술 과자단)
+  function drawEnemies(world, now) {
+    const t = now / 1000;
+    for (let i = 0; i < world.enemies.length; i++) {
+      const e = world.enemies[i];
       if (e.dead) continue;
-      const flash = e.hitT > 0;
       ctx.save();
       ctx.translate(e.x, e.y);
-      if (e.type === 's1') drawDrone(flash);
-      else if (e.type === 's2') drawSaucer(flash);
-      else drawGunship(flash, e);
+      drawEnemy(ctx, ENEMY_SPRITE[e.type] || 'jelly', { t: t + (i % 7) * 0.29, flash: e.hitT > 0 });
+      if (e.type === 'm1' && e.maxHp) { // 중형 체력 표시 (작은 막대)
+        const w = 36 * Math.max(0, e.hp / e.maxHp);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(-18, -32, 36, 3);
+        ctx.fillStyle = '#9dff9d';
+        ctx.fillRect(-18, -32, w, 3);
+      }
       ctx.restore();
     }
   }
 
-  function drawDrone(flash) { // 주황 소형 (아래를 향함)
-    ctx.fillStyle = flash ? '#ffffff' : '#ff8a3d';
-    ctx.beginPath();
-    ctx.moveTo(0, 12); ctx.lineTo(11, -6); ctx.lineTo(4, -2); ctx.lineTo(0, -10); ctx.lineTo(-4, -2); ctx.lineTo(-11, -6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = flash ? '#ffffff' : '#ffd27a';
-    ctx.beginPath();
-    ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function drawSaucer(flash) { // 보라 원반 (사격형)
-    ctx.fillStyle = flash ? '#ffffff' : '#a46bff';
-    ctx.beginPath();
-    ctx.ellipse(0, 2, 15, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = flash ? '#ffffff' : '#e3d2ff';
-    ctx.beginPath();
-    ctx.ellipse(0, -2, 7, 6, 0, Math.PI, 0);
-    ctx.fill();
-    ctx.fillStyle = '#ff4fa3';
-    ctx.fillRect(-1.5, 7, 3, 4);
-  }
-
-  function drawGunship(flash, e) { // 초록 중형 (머무르며 사격)
-    ctx.fillStyle = flash ? '#ffffff' : '#3f8f6b';
-    ctx.beginPath();
-    ctx.moveTo(-26, -8); ctx.lineTo(26, -8); ctx.lineTo(18, 8); ctx.lineTo(-18, 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = flash ? '#ffffff' : '#6fcf97';
-    ctx.fillRect(-12, -18, 24, 30);
-    ctx.fillStyle = flash ? '#ffffff' : '#264d3b';
-    ctx.fillRect(-4, 10, 8, 10);
-    // 체력 표시 (작은 막대)
-    const w = 36 * Math.max(0, e.hp / e.maxHp);
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(-18, -26, 36, 3);
-    ctx.fillStyle = '#9dff9d';
-    ctx.fillRect(-18, -26, w, 3);
-  }
-
   function drawBoss(b, now) {
-    const flash = b.hitT > 0;
     ctx.save();
     ctx.translate(b.x, b.y);
-    // 몸체 (육각형)
-    ctx.fillStyle = flash ? '#ffffff' : '#7a2340';
-    ctx.beginPath();
-    ctx.moveTo(-60, -10); ctx.lineTo(-36, -36); ctx.lineTo(36, -36); ctx.lineTo(60, -10); ctx.lineTo(40, 30); ctx.lineTo(-40, 30);
-    ctx.closePath();
-    ctx.fill();
-    // 양쪽 포탑
-    ctx.fillStyle = flash ? '#ffffff' : '#b8406a';
-    ctx.fillRect(-52, 0, 16, 26);
-    ctx.fillRect(36, 0, 16, 26);
-    // 가운데 핵 (깜박이는 빛)
-    const pulse = 0.6 + 0.4 * Math.sin(now / 150);
-    ctx.fillStyle = b.phase === 2 ? `rgba(255,80,80,${pulse})` : `rgba(255,210,63,${pulse})`;
-    ctx.beginPath();
-    ctx.arc(0, 0, 14, 0, Math.PI * 2);
-    ctx.fill();
+    drawBossSprite(ctx, 'pudding', { t: now / 1000, flash: b.hitT > 0, phase: b.phase });
     ctx.restore();
   }
 
@@ -298,6 +228,8 @@ export function createRenderer(canvas) {
     ctx.font = `bold 10px ${FONT}`;
     ctx.textAlign = 'right';
     ctx.fillText('BOSS', x - 4, y + 8);
+    ctx.textAlign = 'left';
+    ctx.fillText(BOSS_CHARS.pudding.name, x, y + 20);
   }
 
   // ------------------------------------------------------------ 아이템
@@ -337,11 +269,36 @@ export function createRenderer(canvas) {
       r.t += dt;
       const life = r.small ? 0.35 : 0.8;
       if (r.t >= life) { rings.splice(i, 1); continue; }
-      ctx.strokeStyle = r.small ? `rgba(255,255,255,${1 - r.t / life})` : `rgba(160,220,255,${1 - r.t / life})`;
-      ctx.lineWidth = r.small ? 2 : 6;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, (r.small ? 60 : 500) * (r.t / life), 0, Math.PI * 2);
-      ctx.stroke();
+      const rad = (r.small ? 60 : 500) * (r.t / life);
+      if (r.small) {
+        ctx.strokeStyle = `rgba(255,255,255,${1 - r.t / life})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, rad, 0, Math.PI * 2);
+        ctx.stroke();
+        continue;
+      }
+      // 폭탄: 무지개 원형 파동
+      ctx.globalAlpha = 1 - r.t / life;
+      ctx.lineWidth = 5;
+      for (let k = 0; k < RAINBOW.length; k++) {
+        ctx.strokeStyle = RAINBOW[k];
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, Math.max(0, rad - k * 5), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // 쓰러질 때 "뿅"
+    for (let i = pops.length - 1; i >= 0; i--) {
+      const q = pops[i];
+      q.t += dt;
+      const life = q.big ? 0.6 : 0.45;
+      if (q.t >= life) { pops.splice(i, 1); continue; }
+      ctx.save();
+      ctx.translate(q.x, q.y);
+      drawPop(ctx, q.t / life, q.big);
+      ctx.restore();
     }
   }
 
@@ -362,20 +319,13 @@ export function createRenderer(canvas) {
     ctx.fillStyle = 'rgba(5,8,25,0.55)';
     ctx.fillRect(0, 0, VIEW.W, DISPLAY.HUD_H);
 
-    // 목숨: 작은 비행기 아이콘
-    ctx.save();
+    // 목숨: 내 캐릭터 얼굴 아이콘
     for (let i = 0; i < p.lives; i++) {
       ctx.save();
       ctx.translate(14 + i * 15, 18);
-      ctx.scale(0.45, 0.45);
-      ctx.fillStyle = PLAYER_BODY[(slot - 1) % 4];
-      ctx.beginPath();
-      ctx.moveTo(0, -19); ctx.lineTo(17, 9); ctx.lineTo(0, 4); ctx.lineTo(-17, 9);
-      ctx.closePath();
-      ctx.fill();
+      drawPlayerIcon(ctx, slot);
       ctx.restore();
     }
-    ctx.restore();
 
     // 폭탄 수
     const bx = 14 + Math.max(3, p.lives) * 15 + 8;
@@ -392,7 +342,7 @@ export function createRenderer(canvas) {
     ctx.textAlign = 'right';
     ctx.fillText(p.score.toLocaleString('ko-KR'), VIEW.W - 48, 24);
     if (world.players.length > 1) {
-      ctx.fillStyle = PLAYER_BODY[(slot - 1) % 4];
+      ctx.fillStyle = playerChar(slot).ui;
       ctx.font = `bold 11px ${FONT}`;
       ctx.fillText(`${slot}P`, VIEW.W - 48, 34);
     }

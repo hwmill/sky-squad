@@ -17,6 +17,7 @@ import * as screens from './ui/screens.js';
 import { createFriends } from './ui/friends.js';
 import { renderRoom, bindRoom, showInvite } from './ui/room.js';
 import { isKakaoInApp, showKakaoGuide } from './ui/install-guide.js';
+import { startPreview } from './ui/preview.js';
 
 const BEST_KEY = 'sky:best';
 const params = new URLSearchParams(location.search);
@@ -540,10 +541,15 @@ window.addEventListener('resize', () => {
 });
 
 renderer.resize();
-toTitle();
-// 카톡 안 브라우저면 Chrome 안내를 먼저. 그 외에는 초대 링크(?inv=)·첫 등록 처리
-if (isKakaoInApp()) showKakaoGuide(() => friends.start());
-else friends.start();
+if (params.get('preview') === 'chars') {
+  // 캐릭터 미리보기 (?preview=chars): 메뉴·온라인 기능 없이 그림만
+  startPreview(canvas); // 화면 크기 변경은 아래 resize 처리기가 그대로 맞춤
+} else {
+  toTitle();
+  // 카톡 안 브라우저면 Chrome 안내를 먼저. 그 외에는 초대 링크(?inv=)·첫 등록 처리
+  if (isKakaoInApp()) showKakaoGuide(() => friends.start());
+  else friends.start();
+}
 
 // PWA: 오프라인 캐시 (서비스워커). 실패해도 게임은 동작
 // 새 버전을 받아 두면 "새 버전이 있어요 [새로고침]" → 누르면 교체 후 다시 열기
