@@ -8,7 +8,7 @@ export { Lobby, GameRoom };
 
 const LOBBY_NAME = 'main';
 // 서버 코드를 바꿀 때마다 올림 → 배포 주소(/)에서 새 코드가 반영됐는지 확인
-const SERVER_VERSION = 5;
+const SERVER_VERSION = 6;
 
 function corsHeaders(origin) {
   return {
