@@ -12,7 +12,7 @@
 |---|---|
 | 화면 | 순수 JavaScript(ES 모듈), Canvas 2D, PWA(manifest + service worker). 빌드 도구·프레임워크 없음 |
 | 서버 | Cloudflare Workers + Durable Objects(SQLite 방식, 무료 플랜), wrangler |
-| 배포 | 화면: GitHub Actions → GitHub Pages (`web/`) / 서버: Workers Builds (`server/`) |
+| 배포 | 화면: GitHub Actions → GitHub Pages (`web/`) / 서버: Workers Builds (`server/`, 빌드 명령 `npm test` 통과해야 배포). 서버 코드를 바꾸면 `SERVER_VERSION`을 올린다 |
 | 테스트 | `node --test tests/` (게임 규칙), `server/test/` (API) |
 | 개발 PC | Windows, VS Code, Node.js LTS, Python(로컬 정적 서버용) |
 
@@ -67,4 +67,4 @@ python tools/make_icons.py
 - [x] 2단계: 서버 + 친구 등록 ← Worker 배포 완료 (https://sky-squad-api.terry96.workers.dev)
 - [x] 3단계: 게임방 + 2~4인 플레이 ← 실제 폰 2대 확인 완료
 - [x] 4단계: 안정화 ← 실제 폰 확인 완료
-- [ ] 5단계: 자동 배포 ← README 정리 완료. 사용자가 Workers Builds 연결 후 서버 푸시로 자동 반영 확인 대기
+- [x] 5단계: 자동 배포 ← Workers Builds 연결, 서버 푸시 51초 만에 자동 반영 확인 (2026-11-17)
