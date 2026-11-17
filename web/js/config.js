@@ -1,7 +1,7 @@
 // 공개 설정만 둔다 (비밀값 금지).
 // 서버(Worker) 주소: 배포 후 `wrangler deploy`가 알려 주는 주소를 PROD_API_BASE에 적는다.
 // 비어 있으면 온라인 기능(친구)은 "연결할 수 없어요"로 표시되고, 혼자 하기는 그대로 된다.
-const PROD_API_BASE = '';
+const PROD_API_BASE = 'https://sky-squad-api.terry96.workers.dev';
 
 const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
 

@@ -64,7 +64,7 @@ python tools/make_icons.py
 ## 현재 상태 / 다음 할 일
 - [x] 0단계: 준비 (폴더 뼈대, Pages 배포)
 - [x] 1단계: 혼자 하기 완성 + 폰 설치
-- [x] 2단계: 서버 + 친구 등록 ← 로컬 확인 완료. Worker 배포 후 `web/js/config.js`의 PROD_API_BASE 채우기 대기
+- [x] 2단계: 서버 + 친구 등록 ← Worker 배포 완료 (https://sky-squad-api.terry96.workers.dev)
   - `/api/rooms`(방 만들기)는 GameRoom과 함께 3단계에서
 - [ ] 3단계: 게임방 + 2~4인 플레이
 - [ ] 4단계: 안정화
