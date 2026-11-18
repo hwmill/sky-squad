@@ -1,9 +1,10 @@
 // 게임 계산의 중심: 세계(world) 상태를 만들고 1/60초씩 진행한다.
 // stepWorld는 화면(DOM)을 쓰지 않으므로 Node에서 테스트할 수 있다.
 // startLoop만 브라우저용 (requestAnimationFrame).
-import { TICK, SHOT, ENEMY_SHOT, STAGE1 } from './rules.js';
-import { createPool, moveBullets, sweepBullets } from './bullets.js';
-import { createPlayer, isAlive, movePlayer, tickPlayer, useBomb, continuePlayer } from './player.js';
+import { TICK, SHOT, ENEMY_SHOT, STAGE1, DIFFICULTY, PLAYER } from './rules.js';
+import { createPool, moveBullets, sweepBullets, clearPool } from './bullets.js';
+import { createPlayer, isAlive, movePlayer, tickPlayer, useBomb, continuePlayer, placeAtStart } from './player.js';
+import { updateCoins, collectCoins, giveClearBonus } from './coins.js';
 import { spawnEnemy, updateEnemies, removeDeadEnemies } from './enemies.js';
 import { createBoss, updateBoss } from './boss.js';
 import { updatePowerups } from './powerups.js';
@@ -23,7 +24,8 @@ export function makeRng(seed) {
 
 // state: play(진행) / continue(전원 목숨 0, 카운트다운 중 멈춤) / over(게임 오버) / clear(보스 처치)
 // slots: 같이 할 때 자리 번호 목록 (예: [1, 2, 4]). 없으면 1..playerCount
-export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline = STAGE1_TIMELINE } = {}) {
+// economy: 코인·상점 사용 (SPEC-v2). 7단계는 혼자 하기만 켬, 같이 하기는 9단계에서
+export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline = STAGE1_TIMELINE, economy = false } = {}) {
   const list = slots && slots.length ? slots : Array.from({ length: playerCount }, (_, i) => i + 1);
   const players = list.map((slot) => createPlayer(slot));
   return {
@@ -42,7 +44,41 @@ export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline 
     stage: { t: 0, next: 0, oneUps: 0, bossSpawned: false },
     timeline,
     clearT: 0,
+    economy,
+    coins: [],        // 떨어진 코인
+    round: 1,         // 몇 번째 스테이지 (7단계: 스테이지 1 반복, 난이도만 오름)
+    hpMul: 1,         // 적 체력 배율
+    shotMul: 1,       // 적 탄 속도 배율
   };
+}
+
+// 다음 스테이지 시작 (상점에서 "다음 스테이지로"). 점수·코인·상점 효과는 유지
+export function nextRound(world, timeline = world.timeline) {
+  world.round++;
+  world.hpMul = 1 + DIFFICULTY.HP_PER_STAGE * (world.round - 1);
+  world.shotMul = 1 + DIFFICULTY.SHOT_SPEED_PER_STAGE * (world.round - 1);
+  world.timeline = timeline;
+  world.stage = { t: 0, next: 0, oneUps: 0, bossSpawned: false };
+  world.enemies = [];
+  world.boss = null;
+  world.powerups = [];
+  world.coins = [];
+  clearPool(world.shots);
+  clearPool(world.eshots);
+  world.clearT = 0;
+  world.state = 'play';
+  for (const p of world.players) {
+    p.stageCoins = 0;
+    p.missed = false;
+    p.shield = p.shieldNext; // 산 보호막은 이번 스테이지에서만
+    p.shieldNext = 0;
+    if (!isAlive(p)) continue;
+    placeAtStart(p);
+    p.invuln = PLAYER.HIT_INVULN;
+    p.bombT = 0;
+    p.fireT = 0;
+  }
+  world.events.push({ type: 'round', round: world.round });
 }
 
 const NO_INPUT = { dx: 0, dy: 0, bomb: false };
@@ -102,8 +138,10 @@ export function stepWorld(world, inputs = []) {
   updateEnemies(world, dt);
   if (world.boss) updateBoss(world, world.boss, dt);
   updatePowerups(world, dt);
+  if (world.economy) updateCoins(world, dt);
 
   handleCollisions(world);
+  if (world.economy) collectCoins(world);
 
   sweepBullets(world);
   removeDeadEnemies(world);
@@ -113,6 +151,7 @@ export function stepWorld(world, inputs = []) {
   if (world.clearT > 0) {
     world.clearT -= dt;
     if (world.clearT <= 0) {
+      giveClearBonus(world); // 클리어 보너스 + 노미스 보너스 (economy일 때만)
       world.state = 'clear';
       world.events.push({ type: 'clear' });
     }

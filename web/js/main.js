@@ -2,7 +2,8 @@
 // - 혼자 하기(solo): 이 폰에서 계산·그리기
 // - 같이 하기 방장(host): 이 폰이 게임 전체를 계산하고 초당 15회 상태를 보냄
 // - 같이 하기 게스트(guest): 상태를 받아 보간해서 그리고, 내 비행기 위치를 초당 10회 보냄
-import { createWorld, startLoop, continueGame, giveUp } from './game/engine.js';
+import { createWorld, startLoop, continueGame, giveUp, nextRound } from './game/engine.js';
+import { openShopScreen, showStageClear } from './ui/shop-screen.js';
 import { createRenderer } from './game/render.js';
 import { createInput } from './game/input.js';
 import { createSound } from './game/sound.js';
@@ -25,6 +26,8 @@ const params = new URLSearchParams(location.search);
 const DEBUG = params.get('debug') === '1';
 const DEBUG_BOSS = DEBUG && params.get('boss') === '1';
 const DEBUG_BOSS_LEAD = 3; // 보스 등장 몇 초 전부터
+// 개발 모드 &coins=500: 혼자 하기를 코인 500개로 시작 (상점 확인용)
+const DEBUG_COINS = DEBUG ? Number(params.get('coins')) || 0 : 0;
 const NO_INPUT = { dx: 0, dy: 0, bomb: false };
 
 function loadBest() { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } }
@@ -46,6 +49,7 @@ let idleRaf = 0;
 const guestInputs = new Map(); // 방장: 자리별 마지막 입력
 let netEvents = [];            // 방장: 다음 스냅샷에 실을 효과 사건
 let lastSnapAt = 0;
+let stageClearTimer = 0;       // 혼자 하기: 클리어 결과 → 상점으로 넘어가는 타이머
 
 // FPS 측정 (개발 모드)
 let fps = 0;
@@ -68,6 +72,7 @@ const myPlayer = (players) => players.find((p) => p.slot === mySlot);
 
 // 진행 중인 게임을 모두 멈춤 (화면 전환 전)
 function stopGames() {
+  clearTimeout(stageClearTimer);
   if (loop) { loop.pause(); loop = null; }
   if (guest) { cancelAnimationFrame(guest.raf); guest = null; }
   screens.hideContinue();
@@ -124,7 +129,8 @@ function startLocalGame(slots, seed) {
   stopIdle();
   stopGames();
   input.reset();
-  world = createWorld({ slots, seed });
+  world = createWorld({ slots, seed, economy: mode === 'solo' }); // 코인·상점은 혼자 하기만 (같이 하기는 9단계)
+  if (DEBUG_COINS && mode === 'solo') world.players[0].coins = DEBUG_COINS;
   if (DEBUG_BOSS) {
     world.stage.t = STAGE1.BOSS_AT - DEBUG_BOSS_LEAD;
     world.stage.next = world.timeline.length;
@@ -148,11 +154,44 @@ function startSolo() {
 function finish(w) {
   loop.pause();
   drawFrame(w, performance.now()); // 마지막 사건(게임 오버·클리어 소리)까지 처리
+  if (mode === 'solo' && w.state === 'clear') { stageClear(w); return; }
   if (mode === 'host' && room) {
     sendSnapshot(true);
     room.conn.send({ t: 'end' }); // 서버: 다시 시작할 수 있게
   }
   showMyResult(w.state === 'clear', myPlayer(w.players)?.score || 0);
+}
+
+// 혼자 하기 클리어: 결과 3초 → 상점 → 다음 스테이지 (7단계: 스테이지 1을 난이도 +1로 다시)
+function stageClear(w) {
+  const p = myPlayer(w.players);
+  const best = loadBest();
+  const newBest = p.score > best;
+  if (newBest) saveBest(p.score);
+  stageClearTimer = showStageClear({
+    round: w.round,
+    score: p.score,
+    stageCoins: p.stageCoins,
+    nomiss: !p.missed,
+    best: Math.max(best, p.score),
+    newBest,
+  }, () => {
+    if (world !== w || !loop) return;
+    openShopScreen(p, {
+      onBuy: () => {
+        sound.handle([{ type: 'powerup' }], mySlot);
+        renderer.draw(w, performance.now(), { slot: mySlot }); // 뒤 화면의 코인 수도 갱신
+      },
+      onDone: () => {
+        if (world !== w || !loop) return;
+        nextRound(w);
+        input.reset();
+        screens.hideAll();
+        loop.resume();
+        screens.toast(`${w.round}번째 스테이지! 적이 조금 더 단단해졌어요`);
+      },
+    });
+  });
 }
 
 function showMyResult(cleared, score) {

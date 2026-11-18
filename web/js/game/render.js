@@ -1,10 +1,10 @@
 // 그리기 전용. 게임 상태(world)를 읽기만 하고 바꾸지 않는다.
 // 그림 파일 없이 Canvas 도형으로 직접 그린다.
 // 캐릭터·적 그림은 sprites.js (SPEC-v2 6단계)
-import { VIEW, DISPLAY, PLAYER, ENEMY_SHOT, POWERUP } from './rules.js';
+import { VIEW, DISPLAY, PLAYER, ENEMY_SHOT, POWERUP, COIN } from './rules.js';
 import { bombButtonCenter } from './input.js';
 import {
-  drawPlayer, drawPlayerIcon, drawHitDot, drawEnemy, drawBoss as drawBossSprite, drawStarShot, drawPop,
+  drawPlayer, drawPlayerIcon, drawHitDot, drawEnemy, drawBoss as drawBossSprite, drawStarShot, drawPop, drawCoin,
   playerChar, ENEMY_SPRITE, BOSS_CHARS, RAINBOW,
 } from './sprites.js';
 
@@ -22,6 +22,7 @@ export function createRenderer(canvas) {
   const sparks = [];
   const rings = [];
   const pops = [];          // "뿅" 효과
+  const floats = [];        // 떠오르는 글자 (코인 +1, 보호막!)
   const tilts = new Map();  // 자리별 기울기 (그림 전용, 계산에는 영향 없음)
   const stars = makeStars();
 
@@ -57,6 +58,11 @@ export function createRenderer(canvas) {
         case 'bossPhase': burst(ev.x, ev.y, 30, 140, '#ff5b9b'); break;
         case 'boss': warnT = 2.5; break;
         case 'powerup': rings.push({ x: ev.x, y: ev.y, t: 0, small: true }); break;
+        case 'coin': if (floats.length < 30) floats.push({ x: ev.x, y: ev.y, t: 0, text: `+${ev.value}`, color: '#ffd23f' }); break;
+        case 'shield':
+          burst(ev.x, ev.y, 18, 120, '#9ad8ff');
+          floats.push({ x: ev.x, y: ev.y - 20, t: 0, text: '보호막!', color: '#9ad8ff' });
+          break;
         default: break;
       }
     }
@@ -89,6 +95,7 @@ export function createRenderer(canvas) {
     drawBackground(now, frozen);
     if (world) {
       drawPowerups(world);
+      if (world.coins) drawCoins(world, now);
       drawEnemies(world, now);
       if (world.boss && !world.boss.dead) drawBoss(world.boss, now);
       drawShots(world, now, opts.slot || 1);
@@ -158,6 +165,16 @@ export function createRenderer(canvas) {
       ctx.translate(p.x, p.y);
       drawPlayer(ctx, p.slot, { t: now / 1000 + p.slot * 0.37, tilt, bombing: p.bombT > 0 });
       drawHitDot(ctx, PLAYER.HITBOX_R - 1); // 실제 피격 판정 위치 (그림보다 훨씬 작음)
+      if (p.shield > 0) { // 보호막 (상점): 하늘색 방울
+        const pulse = 0.35 + 0.15 * Math.sin(now / 200);
+        ctx.strokeStyle = `rgba(154,216,255,${pulse + 0.3})`;
+        ctx.fillStyle = `rgba(154,216,255,${pulse * 0.35})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, -4, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
@@ -232,6 +249,20 @@ export function createRenderer(canvas) {
     ctx.fillText(BOSS_CHARS.pudding.name, x, y + 20);
   }
 
+  // ------------------------------------------------------------ 코인 (곧 사라질 코인은 깜박임)
+  function drawCoins(world, now) {
+    const t = now / 1000;
+    for (let i = 0; i < world.coins.length; i++) {
+      const c = world.coins[i];
+      if (c.t > COIN.BLINK_AT && Math.floor(c.t * 10) % 2) continue;
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      if (c.value > 1) ctx.scale(1.45, 1.45); // 중형 적의 큰 코인
+      drawCoin(ctx, t + i * 0.13);
+      ctx.restore();
+    }
+  }
+
   // ------------------------------------------------------------ 아이템
   function drawPowerups(world) {
     ctx.font = `bold 11px ${FONT}`;
@@ -289,6 +320,21 @@ export function createRenderer(canvas) {
       }
       ctx.globalAlpha = 1;
     }
+    // 떠오르는 글자
+    ctx.textAlign = 'center';
+    ctx.font = `900 13px ${FONT}`;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(20,20,40,0.7)';
+    for (let i = floats.length - 1; i >= 0; i--) {
+      const f = floats[i];
+      f.t += dt;
+      if (f.t >= 0.7) { floats.splice(i, 1); continue; }
+      ctx.globalAlpha = 1 - f.t / 0.7;
+      ctx.strokeText(f.text, f.x, f.y - f.t * 30);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y - f.t * 30);
+    }
+    ctx.globalAlpha = 1;
     // 쓰러질 때 "뿅"
     for (let i = pops.length - 1; i >= 0; i--) {
       const q = pops[i];
@@ -351,6 +397,18 @@ export function createRenderer(canvas) {
     ctx.fillStyle = POWERUP_COLOR.P;
     ctx.font = `bold 13px ${FONT}`;
     ctx.fillText(`P${p.power}`, VIEW.W - 12, 24);
+
+    // 코인 (혼자 하기): 왼쪽 아래
+    if (world.economy && Number.isFinite(p.coins)) {
+      ctx.save();
+      ctx.translate(20, VIEW.H - 34);
+      drawCoin(ctx, 0);
+      ctx.restore();
+      ctx.fillStyle = '#ffd23f';
+      ctx.font = `bold 15px ${FONT}`;
+      ctx.textAlign = 'left';
+      ctx.fillText(p.coins.toLocaleString('ko-KR'), 32, VIEW.H - 29);
+    }
 
     if (fps) {
       ctx.fillStyle = fps >= 55 ? '#9dff9d' : '#ff9b9b';

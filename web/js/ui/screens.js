@@ -1,6 +1,6 @@
 // 화면 전환: 타이틀, 등록, 친구, 컨티뉴(10초), 일시정지, 결과. index.html의 .screen 요소를 보이고 숨긴다
 const $ = (id) => document.getElementById(id);
-const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result', 'notice'];
+const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result', 'notice', 'stageclear', 'shop'];
 const TOAST_MS = 3000;
 
 export function showOnly(id) {

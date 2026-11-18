@@ -12,6 +12,7 @@ export function createSound() {
   let noiseBuf = null;
   let on = load(STORE_KEY, '1') === '1';
   let lastShot = 0;
+  let lastCoin = 0;
 
   function unlock() {
     if (!ac) {
@@ -73,6 +74,12 @@ export function createSound() {
     boss() { for (let i = 0; i < 3; i++) { tone('square', 440, 440, 0.18, 0.08, i * 0.45); tone('square', 330, 330, 0.18, 0.08, i * 0.45 + 0.2); } },
     bossDown() { noise(1.4, 0.5, 1500); tone('sine', 220, 30, 1.3, 0.3); },
     clear() { [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.22, 0.14, i * 0.15)); },
+    coin() { // 짧은 "띵" (너무 자주 나지 않게 간격 제한)
+      if (ac.currentTime - lastCoin < 0.06) return;
+      lastCoin = ac.currentTime;
+      tone('triangle', 1320, 1760, 0.07, 0.07);
+    },
+    shield() { tone('sine', 880, 1320, 0.25, 0.15); tone('triangle', 660, 990, 0.25, 0.08, 0.05); },
     gameover() { [392, 330, 262, 196].forEach((f, i) => tone('triangle', f, f * 0.98, 0.3, 0.12, i * 0.25)); },
   };
 
@@ -90,6 +97,8 @@ export function createSound() {
         case 'bossDown': fx.bossDown(); break;
         case 'clear': fx.clear(); break;
         case 'gameover': fx.gameover(); break;
+        case 'coin': if (ev.slot === mySlot) fx.coin(); break;
+        case 'shield': fx.shield(); break;
         default: break;
       }
     }

@@ -114,3 +114,44 @@ export const BOSS = {
 export const STAGE1 = { BOSS_AT: 170 }; // 스테이지 시작 후 보스 등장 시각
 
 export const BOMB_BUTTON = { D: 64, MARGIN: 18, TOUCH_EXTRA: 8 };
+
+// ---------------------------------------------------------------- 2차 (SPEC-v2)
+// 코인 (SPEC-v2 3장). 이번 판에서만 쓰고 새 게임이면 0. 이어하기해도 유지
+export const COIN = {
+  SMALL: 1,          // 소형 적 (떨어진 코인을 주워야 획득)
+  MEDIUM: 5,         // 중형 적 (큰 코인 1개)
+  BOSS: 50,          // 보스: 살아 있는 전원이 각자 바로 받음
+  CLEAR_BONUS: 100,  // 스테이지 클리어: 살아 있는 전원이 각자
+  NOMISS_BONUS: 50,  // 그 스테이지에서 목숨을 안 잃으면 추가
+  LIFE: 4,           // 떨어진 코인이 사라지기까지
+  BLINK_AT: 3,       // 이 시각부터 깜박여서 곧 사라짐을 알림
+  R: 7,              // 코인 크기 (줍기 판정은 PLAYER.PICKUP_R과 합산)
+  MAGNET_R: 70,      // 이 거리 안이면 자동으로 끌려옴
+  MAGNET_SPEED: 380,
+  POP_SPEED: 50,     // 떨어질 때 살짝 튀어 오르는 속도
+  GRAVITY: 240,
+  FALL_MAX: 130,     // 4초 동안 화면 위쪽에서 아래쪽 플레이어 근처까지 내려오도록
+  MAX: 120,          // 화면에 동시에 있는 코인 최대 개수
+};
+
+// 상점 상품 (SPEC-v2 3장). prices[i] = i번째 구매 가격. max는 아래 shop.js가 상품마다 판정
+export const SHOP = {
+  ITEMS: [
+    { id: 'power', name: '총알 파워업', desc: '총알 단계 +1', prices: [150] },
+    { id: 'rapid', name: '빠른 연사', desc: '발사 속도 +15%', prices: [120, 200, 300] },
+    { id: 'wings', name: '날쌘 날개', desc: '이동 속도 +10%', prices: [100, 180] },
+    { id: 'bomb', name: '폭탄', desc: '폭탄 +1', prices: [80] },
+    { id: 'life', name: '생명', desc: '목숨 +1 (상점마다 1개)', prices: [300] },
+    { id: 'shield', name: '보호막', desc: '다음 스테이지 피격 1회 막기', prices: [150] },
+    { id: 'magnet', name: '큰 자석', desc: '코인 끌어오는 거리 2배', prices: [100] },
+  ],
+  RAPID_STEP: 0.15,    // 빠른 연사 1회당 발사 속도 +15%
+  WINGS_STEP: 0.1,     // 날쌘 날개 1회당 이동 속도 +10%
+  MAGNET_MULT: 2,
+  LIFE_PER_VISIT: 1,
+  SHIELD_INVULN: 1.5,  // 보호막이 막아 준 뒤 잠깐 무적 (연달아 맞지 않게)
+  RESULT_SECONDS: 3,   // 클리어 결과 화면을 보여 주는 시간
+};
+
+// 스테이지가 오를 때마다 (SPEC-v2 4장). 2차 7단계에서는 스테이지 1을 난이도만 올려 반복
+export const DIFFICULTY = { HP_PER_STAGE: 0.2, SHOT_SPEED_PER_STAGE: 0.08 };

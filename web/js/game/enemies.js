@@ -1,7 +1,8 @@
 // 일반 적(소형 s1·s2, 중형 m1): 등장, 이동 패턴, 사격, 피해
-import { VIEW, ENEMY, TEAM } from './rules.js';
+import { VIEW, ENEMY, TEAM, COIN } from './rules.js';
 import { fireEnemyShot } from './bullets.js';
 import { dropPowerup } from './powerups.js';
+import { dropCoin } from './coins.js';
 
 const DEG = Math.PI / 180;
 
@@ -25,7 +26,7 @@ export function aimAt(world, x, y) {
 // spec: 등장표 한 줄 { type, x, pattern, dir, drop }
 export function spawnEnemy(world, spec) {
   const def = ENEMY[spec.type];
-  const hp = scaledHp(def.hp, world.players.length);
+  const hp = Math.round(scaledHp(def.hp, world.players.length) * (world.hpMul || 1)); // hpMul: 스테이지 난이도
   world.enemies.push({
     id: world.nextId++,
     type: spec.type,
@@ -124,6 +125,7 @@ function killEnemy(world, e, owner) {
   if (p) p.score += def.score;
   world.events.push({ type: 'explode', x: e.x, y: e.y, size: e.type === 'm1' ? 2 : 1 });
   if (e.type === 'm1') dropPowerup(world, e.x, e.y, e.drop);
+  dropCoin(world, e.x, e.y, e.type === 'm1' ? COIN.MEDIUM : COIN.SMALL); // 혼자 하기(economy)일 때만
 }
 
 export function removeDeadEnemies(world) {

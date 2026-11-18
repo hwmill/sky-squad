@@ -1,8 +1,10 @@
 // 플레이어 비행기: 이동, 자동 발사, 폭탄, 피격, 이어하기
-import { VIEW, PLAYER, BOMB, SHOT, CONTINUE } from './rules.js';
+import { VIEW, PLAYER, BOMB, SHOT, CONTINUE, SHOP } from './rules.js';
 import { fireShot, clearPool } from './bullets.js';
 import { damageEnemy } from './enemies.js';
 import { damageBoss } from './boss.js';
+import { initCoins } from './coins.js';
+import { initUpgrades, fireRateOf, moveMulOf } from './shop.js';
 
 export function createPlayer(slot) {
   const p = {
@@ -20,6 +22,8 @@ export function createPlayer(slot) {
     spectator: false,
     spawn: 0,       // 시작 위치로 옮길 때마다 +1 (게스트가 자기 위치를 맞추는 신호)
   };
+  initCoins(p);     // 코인·노미스 기록 (SPEC-v2)
+  initUpgrades(p);  // 상점 효과 (SPEC-v2)
   placeAtStart(p);
   return p;
 }
@@ -43,8 +47,9 @@ export function movePlayer(p, input) {
     p.x = input.x;
     p.y = input.y;
   } else {
-    p.x += input.dx || 0;
-    p.y += input.dy || 0;
+    const k = moveMulOf(p); // 날쌘 날개: 손가락보다 조금 더 많이 움직임
+    p.x += (input.dx || 0) * k;
+    p.y += (input.dy || 0) * k;
   }
   p.x = clamp(p.x, PLAYER.EDGE, VIEW.W - PLAYER.EDGE);
   p.y = clamp(p.y, PLAYER.EDGE, VIEW.H - PLAYER.EDGE);
@@ -55,14 +60,15 @@ function fireVolley(world, p) {
   world.events.push({ type: 'shot', slot: p.slot });
 }
 
-// 타이머와 자동 발사 (초당 SHOT.RATE번)
+// 타이머와 자동 발사 (초당 SHOT.RATE번, 빠른 연사를 사면 더 빠르게)
 export function tickPlayer(world, p, dt) {
   if (!isAlive(p)) return;
   if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
   if (p.bombT > 0) p.bombT = Math.max(0, p.bombT - dt);
+  const gap = 1 / fireRateOf(p, SHOT.RATE);
   while (p.fireT <= 1e-9) {
     fireVolley(world, p);
-    p.fireT += 1 / SHOT.RATE;
+    p.fireT += gap;
   }
   p.fireT -= dt;
 }
@@ -81,9 +87,17 @@ export function useBomb(world, p) {
 }
 
 // 피격: 목숨 -1, 총알 단계 -1(최소 1), 폭탄 충전, 하단 중앙에서 무적 상태로 부활
+// 보호막(상점)이 있으면 한 번은 막고 잠깐 무적
 export function hitPlayer(world, p) {
   if (!isAlive(p) || p.invuln > 0) return false;
+  if (p.shield > 0) {
+    p.shield--;
+    p.invuln = SHOP.SHIELD_INVULN;
+    world.events.push({ type: 'shield', x: p.x, y: p.y, slot: p.slot });
+    return false;
+  }
   world.events.push({ type: 'hit', x: p.x, y: p.y, slot: p.slot });
+  p.missed = true; // 노미스 보너스 없음
   p.lives--;
   p.power = Math.max(PLAYER.MIN_POWER, p.power - 1);
   p.bombs = Math.max(p.bombs, PLAYER.RESPAWN_BOMBS);

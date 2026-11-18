@@ -87,6 +87,7 @@ button.link { display: inline; width: auto; margin: 10px 0 0; padding: 4px 6px; 
 button.small { display: inline-block; width: auto; margin: 0; padding: 6px 10px; font-size: 13px; font-weight: 600; background: rgba(255, 255, 255, 0.1); }
 button:active { transform: scale(0.98); }
 button:disabled { opacity: 0.5; }
+button[hidden] { display: none; } /* display:block이 hidden을 덮어쓰지 않게 (대기실 시작 버튼·상점 버튼) */
 
 /* 2단계: 등록·친구 화면 */
 .screen.top { z-index: 20; }
@@ -172,3 +173,26 @@ h3 { margin: 20px 0 0; font-size: 16px; color: var(--sub); }
   z-index: 30;
 }
 .toast[hidden] { display: none; }
+
+/* 2차 7단계: 클리어 결과·상점 (폰 한 화면에 들어가게 촘촘히) */
+.coinline { margin: 10px 0 0; font-size: 20px; font-weight: 800; color: #ffd23f; }
+.nomiss { margin: 6px 0 0; color: #9dff9d; font-weight: 700; min-height: 1.2em; }
+.card.shopcard { padding: 14px 12px; }
+.shophead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shophead h2 { margin: 0; font-size: 22px; }
+.wallet { margin: 0; color: var(--sub); font-size: 12px; }
+.wallet b { color: #ffd23f; font-size: 19px; margin-left: 4px; }
+.shopgrid { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.shopgrid .item {
+  display: grid; grid-template-columns: 1fr auto; column-gap: 4px;
+  padding: 8px 10px; border-radius: 12px; text-align: left;
+  background: rgba(255, 255, 255, 0.07); border: 2px solid transparent; cursor: pointer;
+}
+.shopgrid .item b { grid-column: 1 / 3; font-size: 14px; }
+.shopgrid .item .desc { grid-column: 1 / 3; font-size: 11px; color: var(--sub); line-height: 1.3; min-height: 2.6em; }
+.shopgrid .item .price { margin-top: 3px; font-size: 13px; font-weight: 800; color: #ffd23f; }
+.shopgrid .item .lv { margin-top: 3px; align-self: end; font-size: 10px; color: #b8c4ff; text-align: right; }
+.shopgrid .item.sel { border-color: #ffd23f; background: rgba(255, 210, 63, 0.14); }
+.shopgrid .item.off { opacity: 0.55; filter: grayscale(0.8); }
+.shopgrid .item.off .price { color: #ff9b9b; font-size: 11px; }
+.shopcard button { margin-top: 8px; padding: 11px; font-size: 16px; }

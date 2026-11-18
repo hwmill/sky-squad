@@ -3,11 +3,12 @@
 import { VIEW, BOSS, SCORE, ENEMY } from './rules.js';
 import { fireEnemyShot, clearPool } from './bullets.js';
 import { scaledHp, aimAt } from './enemies.js';
+import { giveBossCoins } from './coins.js';
 
 const DEG = Math.PI / 180;
 
 export function createBoss(world) {
-  const hp = scaledHp(BOSS.HP, world.players.length);
+  const hp = Math.round(scaledHp(BOSS.HP, world.players.length) * (world.hpMul || 1));
   return {
     x: VIEW.W / 2,
     y: BOSS.START_Y,
@@ -94,6 +95,7 @@ export function damageBoss(world, b, dmg, owner) {
   b.dead = true;
   const p = world.players.find((q) => q.slot === owner);
   if (p) p.score += SCORE.BOSS;
+  giveBossCoins(world);
   clearPool(world.eshots);
   world.clearT = BOSS.CLEAR_DELAY;
   world.events.push({ type: 'bossDown', x: b.x, y: b.y });

@@ -102,6 +102,32 @@
     </div>
   </section>
 
+  <!-- 스테이지 클리어 결과 (3초 뒤 상점) -->
+  <section id="stageclear" class="screen dim" hidden>
+    <div class="card">
+      <h2 id="scTitle">스테이지 클리어!</h2>
+      <p id="scScore" class="score">0</p>
+      <p id="scCoins" class="coinline"></p>
+      <p id="scNomiss" class="nomiss"></p>
+      <p id="scBest" class="best"></p>
+      <p class="help">곧 상점이 열려요…</p>
+    </div>
+  </section>
+
+  <!-- 상점 -->
+  <section id="shop" class="screen dim" hidden>
+    <div class="card wide shopcard">
+      <div class="shophead">
+        <h2>상점</h2>
+        <p class="wallet"><span id="shopWho"></span> <b id="shopCoins">0</b></p>
+      </div>
+      <ul id="shopItems" class="shopgrid"></ul>
+      <button id="btnShopBuy" class="primary" hidden></button>
+      <button id="btnShopUndo" class="ghost" hidden></button>
+      <button id="btnShopNext" class="primary alt">다음 스테이지로 ▶</button>
+    </div>
+  </section>
+
   <!-- 카카오톡 안 브라우저 안내 -->
   <section id="kakao" class="screen dim top" hidden>
     <div class="card">

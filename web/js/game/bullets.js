@@ -44,10 +44,11 @@ export function fireShot(world, x, y, angleDeg, owner) {
   s.dead = false;
 }
 
-// 적 탄. angle: 라디안 (0 = 오른쪽, π/2 = 아래쪽)
-export function fireEnemyShot(world, x, y, angle, speed) {
+// 적 탄. angle: 라디안 (0 = 오른쪽, π/2 = 아래쪽). world.shotMul: 스테이지 난이도 (탄 속도)
+export function fireEnemyShot(world, x, y, angle, baseSpeed) {
   const b = take(world.eshots);
   if (!b) return;
+  const speed = baseSpeed * (world.shotMul || 1);
   b.x = x;
   b.y = y;
   b.vx = Math.cos(angle) * speed;
