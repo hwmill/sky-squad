@@ -39,7 +39,19 @@ test('자동 발사: 1초(60프레임)에 8번, 4단계는 한 번에 5발', () 
   const w4 = createWorld(EMPTY);
   w4.players[0].power = 4;
   tickPlayer(w4, w4.players[0], TICK.DT);
-  assert.equal(w4.shots.list.length, 5);
+  assert.equal(w4.shots.list.length, SHOT.PATTERNS[4].length);
+});
+
+test('총알 단계: 1~최대 모든 단계에 발사 모양이 있고, 단계가 오를수록 총알 수가 줄지 않음', () => {
+  let prev = 0;
+  for (let k = 1; k <= PLAYER.MAX_POWER; k++) {
+    const n = SHOT.PATTERNS[k].length;
+    assert.ok(n >= prev, `${k}단계`);
+    prev = n;
+  }
+  // 가운데 나란히 쏘는 총알(a: 0) 수도 늘거나 같음 → 보스에게 맞는 수가 줄지 않음
+  const straight = (k) => SHOT.PATTERNS[k].filter((g) => g.a === 0).length;
+  for (let k = 2; k <= PLAYER.MAX_POWER; k++) assert.ok(straight(k) >= straight(k - 1), `${k}단계 나란히 탄`);
 });
 
 test('내 총알은 최대 200개를 넘지 않는다', () => {
@@ -139,13 +151,13 @@ test('폭탄 버튼 입력으로도 동작한다', () => {
 });
 
 // ---------------------------------------------------------------- 파워업
-test('P: 총알 +1단계, 4단계에서 먹으면 점수 +1000', () => {
+test('P: 총알 +1단계, 최대 단계에서 먹으면 점수 +1000', () => {
   const w = createWorld(EMPTY);
   const p = w.players[0];
-  for (let i = 0; i < 3; i++) applyPowerup(w, p, 'P');
-  assert.equal(p.power, 4);
+  for (let i = 0; i < PLAYER.MAX_POWER - 1; i++) applyPowerup(w, p, 'P');
+  assert.equal(p.power, PLAYER.MAX_POWER);
   applyPowerup(w, p, 'P');
-  assert.equal(p.power, 4);
+  assert.equal(p.power, PLAYER.MAX_POWER);
   assert.equal(p.score, SCORE.POWER_MAX_BONUS);
 });
 

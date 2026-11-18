@@ -77,11 +77,12 @@ export function startPreview(canvas) {
 
     // ---- 총알·코인·효과
     label('별 총알 · 코인 · 뿅 효과', 14, 532, 11, '#b8c4ff', 'left');
-    for (let p = 1; p <= 4; p++) {
-      const x = 34 + (p - 1) * 42;
+    for (let p = 1; p <= PLAYER.MAX_POWER; p++) { // 총알 1~8단계 색
+      const x = 22 + (p - 1) * 24;
       at(x, 562, () => drawStarShot(ctx, p, t));
-      label(`${p}단계`, x, 590, 10, '#dfe5ff', 'center', 'normal');
+      label(String(p), x, 590, 10, '#dfe5ff', 'center', 'normal');
     }
+    label('단계', 22 + 3.5 * 24, 604, 9, '#9aa6d8', 'center', 'normal');
     at(232, 562, () => drawCoin(ctx, t));
     label('코인', 232, 590, 10, '#dfe5ff', 'center', 'normal');
     at(306, 566, () => drawPop(ctx, (t % 1.2) / 1.2));

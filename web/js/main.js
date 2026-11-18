@@ -28,6 +28,8 @@ const DEBUG_BOSS = DEBUG && params.get('boss') === '1';
 const DEBUG_BOSS_LEAD = 3; // 보스 등장 몇 초 전부터
 // 개발 모드 &coins=500: 혼자 하기를 코인 500개로 시작 (상점 확인용)
 const DEBUG_COINS = DEBUG ? Number(params.get('coins')) || 0 : 0;
+// 개발 모드 &power=8: 총알 단계를 정해서 시작 (보스 처치 시간 확인용)
+const DEBUG_POWER = DEBUG ? Math.min(PLAYER.MAX_POWER, Math.max(0, Math.floor(Number(params.get('power')) || 0))) : 0;
 const NO_INPUT = { dx: 0, dy: 0, bomb: false };
 
 function loadBest() { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } }
@@ -131,6 +133,7 @@ function startLocalGame(slots, seed) {
   input.reset();
   world = createWorld({ slots, seed, economy: mode === 'solo' }); // 코인·상점은 혼자 하기만 (같이 하기는 9단계)
   if (DEBUG_COINS && mode === 'solo') world.players[0].coins = DEBUG_COINS;
+  if (DEBUG_POWER) for (const p of world.players) p.power = DEBUG_POWER;
   if (DEBUG_BOSS) {
     world.stage.t = STAGE1.BOSS_AT - DEBUG_BOSS_LEAD;
     world.stage.next = world.timeline.length;

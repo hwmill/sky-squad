@@ -480,9 +480,10 @@ const BOSS_DRAW = {
 
 // ------------------------------------------------------------ 총알·코인·효과
 // 별 총알: 단계가 오를수록 색이 화려해짐 (개수는 rules.js의 발사 모양대로)
-const STAR_COLOR = ['#fff3a0', '#ffd84d', '#ff9fd0'];
+// 1~7단계 색, 8단계(최대)는 무지개
+const STAR_COLOR = ['#fff3a0', '#ffd84d', '#ffb347', '#ff9fd0', '#c9a6ff', '#9ad8ff', '#9dff9d'];
 export function starShotColor(power, t) {
-  if (power >= 4) return `hsl(${(t * 360 + 0) % 360}, 95%, 72%)`; // 무지개
+  if (power > STAR_COLOR.length) return `hsl(${(t * 360) % 360}, 95%, 72%)`; // 무지개
   return STAR_COLOR[Math.max(0, power - 1)];
 }
 export function drawStarShot(ctx, power, t = 0) {
