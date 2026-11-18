@@ -5,7 +5,7 @@
 // - 번개 솜사탕: 경고선 → 세로 번개 레이저 / 케이크 대마왕: 3단, 한 단 부서질 때마다 패턴 변경
 import { VIEW, BOSS, BOSSES, SCORE, ENEMY } from './rules.js';
 import { fireEnemyShot, clearPool } from './bullets.js';
-import { scaledHp, aimAt } from './enemies.js';
+import { scaledHp, aimAt, rankMul } from './enemies.js';
 import { giveBossCoins } from './coins.js';
 
 const DEG = Math.PI / 180;
@@ -30,7 +30,7 @@ export const bossDef = (kind) => (BOSSES[kind] || PUDDING);
 export function createBoss(world, kind = world.bossKind || 'pudding') {
   const def = bossDef(kind);
   const n = world.players.length;
-  const mul = world.hpMul || 1;
+  const mul = (world.hpMul || 1) * rankMul(world, 'HP_MAX'); // 스테이지·파워 난이도 (포대 포함)
   const hp = Math.round(scaledHp(def.HP, n) * mul);
   const b = {
     kind,
@@ -165,7 +165,7 @@ export function updateBoss(world, b, dt) {
   }
   const name = cur.list[b.pattern];
   const cfg = def[name];
-  b.fireT -= dt;
+  b.fireT -= dt * rankMul(world, 'FIRE_MAX');
   while (b.fireT <= 0) {
     firePattern(world, b, name, cfg);
     b.fireT += cfg.every * cur.rate;

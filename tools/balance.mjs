@@ -5,6 +5,7 @@
 //   아이 기준: node tools/balance.mjs 3 10 12 chase fixed   (스테이지마다 목숨 3·총알 1/3/5/7/8로 따로)
 //   이어서 1→5: node tools/balance.mjs 3 10 8                (상점에서 파워업→생명→폭탄 순으로 삼)
 //   코인 하한:  node tools/balance.mjs 3 10 8 nochase        (코인을 쫓지 않을 때 얻는 코인)
+//   풀파워:     ALL8=1 node tools/balance.mjs 3 10 12 chase fixed  (모든 스테이지 총알 8단계로)
 const root = new URL('../web/js/game/', import.meta.url).href;
 const { createWorld, stepWorld, nextRound, continueGame, goToStage } = await import(root + 'engine.js');
 const { openShop, buy, itemState } = await import(root + 'shop.js');
@@ -67,7 +68,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   for (let stage = 1; stage <= 5; stage++) {
     if (FIXED) {
       if (stage > 1) goToStage(w, stage);
-      Object.assign(p, { lives: 3, bombs: 3, power: [1, 3, 5, 7, 8][stage - 1], rapidLv: 0, wingsLv: 0, spectator: false, invuln: 2 });
+      Object.assign(p, { lives: 3, bombs: 3, power: process.env.ALL8 ? 8 : [1, 3, 5, 7, 8][stage - 1], rapidLv: 0, wingsLv: 0, spectator: false, invuln: 2 });
     }
     let hits = 0;
     let bossHits = 0;

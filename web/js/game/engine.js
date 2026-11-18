@@ -1,7 +1,7 @@
 // 게임 계산의 중심: 세계(world) 상태를 만들고 1/60초씩 진행한다.
 // stepWorld는 화면(DOM)을 쓰지 않으므로 Node에서 테스트할 수 있다.
 // startLoop만 브라우저용 (requestAnimationFrame).
-import { TICK, SHOT, ENEMY_SHOT, STAGE1, DIFFICULTY, PLAYER } from './rules.js';
+import { TICK, SHOT, ENEMY_SHOT, STAGE1, DIFFICULTY, PLAYER, RANK } from './rules.js';
 import { createPool, moveBullets, sweepBullets, clearPool } from './bullets.js';
 import { createPlayer, isAlive, movePlayer, tickPlayer, useBomb, continuePlayer, placeAtStart } from './player.js';
 import { updateCoins, collectCoins, giveClearBonus } from './coins.js';
@@ -51,9 +51,18 @@ export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline 
     bossAt: STAGE1.BOSS_AT,
     bossKind: 'pudding',
     lasers: [],       // 번개 솜사탕 레이저
-    hpMul: 1,         // 적 체력 배율
-    shotMul: 1,       // 적 탄 속도 배율
+    hpMul: 1,         // 적 체력 배율 (스테이지)
+    shotMul: 1,       // 적 탄 속도 배율 (스테이지)
+    rank: 0,          // 파워에 따른 강함 0~1 (rankOf). 체력·발사 빈도·탄 속도에 곱함
   };
+}
+
+// 파워에 따른 강함 0~1: 살아 있는(관전 아닌) 사람들의 평균 총알 단계로
+export function rankOf(players) {
+  const live = players.filter((p) => p.lives > 0 && !p.spectator);
+  if (!live.length) return 0;
+  const avg = live.reduce((a, p) => a + p.power, 0) / live.length;
+  return Math.max(0, Math.min(1, (avg - RANK.FROM_POWER) / (PLAYER.MAX_POWER - RANK.FROM_POWER)));
 }
 
 // 난이도 배율: 스테이지 n은 적 체력 ×(1 + 0.2(n−1)), 적 탄 속도 ×(1 + 0.08(n−1))
@@ -142,6 +151,7 @@ export function stepWorld(world, inputs = []) {
   world.state = 'play';
   world.t += dt;
   world.frame++;
+  world.rank = rankOf(players);
   runStage(world, dt);
 
   for (let i = 0; i < players.length; i++) {

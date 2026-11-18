@@ -12,6 +12,7 @@ import { createBoss, damageBoss } from '../web/js/game/boss.js';
 import { fireEnemyShot } from '../web/js/game/bullets.js';
 
 const EMPTY = { timeline: [] };
+const EMPTY_W = EMPTY;
 const solo = () => createWorld({ ...EMPTY, economy: true });
 const rich = (coins = 5000) => { const w = solo(); w.players[0].coins = coins; return { w, p: w.players[0], shop: openShop() }; };
 
@@ -201,4 +202,53 @@ test('같이 하기(economy 끔)에서는 코인이 떨어지지 않음 (9단계
   spawnEnemy(w, { type: 's1', x: 100, pattern: 'down' });
   damageEnemy(w, w.enemies[0], 999, 1);
   assert.equal(w.coins.length, 0);
+});
+
+// ------------------------------------------------------------------ 파워에 따라 적도 강해짐 (2026-11-18)
+import { RANK, ENEMY, PLAYER as P_RULES, BOSS as BOSS_RULES } from '../web/js/game/rules.js';
+import { rankOf } from '../web/js/game/engine.js';
+
+test('파워 난이도: 총알 3단계까지는 그대로, 8단계면 최대 (같이 할 때는 살아 있는 사람 평균)', () => {
+  const mk = (power, lives = 3, spectator = false) => ({ power, lives, spectator });
+  assert.equal(rankOf([mk(1)]), 0);
+  assert.equal(rankOf([mk(RANK.FROM_POWER)]), 0);
+  assert.equal(rankOf([mk(P_RULES.MAX_POWER)]), 1);
+  assert.equal(rankOf([mk(8), mk(3)]), 0.5);
+  assert.equal(rankOf([mk(8), mk(1, 0, true)]), 1); // 관전 중인 사람은 빼고
+  assert.equal(rankOf([]), 0);
+});
+
+test('파워 난이도: 8단계면 적·보스 체력 +40%, 적 탄 속도 +10%, 발사 빈도 +25%', () => {
+  const low = createWorld({ ...EMPTY_W });
+  const high = createWorld({ ...EMPTY_W });
+  high.players[0].power = P_RULES.MAX_POWER;
+  stepWorld(low, []);
+  stepWorld(high, []);
+  assert.equal(high.rank, 1);
+  spawnEnemy(low, { type: 'm1', x: 100, pattern: 'down' });
+  spawnEnemy(high, { type: 'm1', x: 100, pattern: 'down' });
+  assert.equal(low.enemies[0].hp, ENEMY.m1.hp);
+  assert.equal(high.enemies[0].hp, Math.round(ENEMY.m1.hp * (1 + RANK.HP_MAX)));
+  assert.equal(createBoss(high).maxHp, Math.round(BOSS_RULES.HP * (1 + RANK.HP_MAX)));
+  fireEnemyShot(high, 0, 0, Math.PI / 2, 100);
+  assert.ok(Math.abs(high.eshots.list[0].vy - 100 * (1 + RANK.SPEED_MAX)) < 1e-9);
+  // 같은 시간 동안 조준형 적이 쏘는 횟수
+  const shots = (w) => {
+    w.eshots.list.length = 0;
+    w.enemies.length = 0;
+    spawnEnemy(w, { type: 's2', x: 330, pattern: 'down' }); // 내 총알이 닿지 않는 자리
+    w.enemies[0].y = 100;
+    let n = 0;
+    for (let i = 0; i < 40 * TICK.HZ; i++) {
+      w.enemies[0].y = 100; // 화면 안에 붙잡아 둠
+      const before = w.eshots.list.length;
+      stepWorld(w, []);
+      w.players[0].invuln = 9;
+      n += Math.max(0, w.eshots.list.length - before);
+    }
+    return n;
+  };
+  const a = shots(low);
+  const b = shots(high);
+  assert.ok(b >= a * 1.2 && b <= a * 1.3, `발사 수 ${a} → ${b}`);
 });

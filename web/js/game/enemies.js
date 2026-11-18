@@ -1,5 +1,5 @@
 // 일반 적(소형 s1·s2, 중형 m1): 등장, 이동 패턴, 사격, 피해
-import { VIEW, ENEMY, TEAM, COIN } from './rules.js';
+import { VIEW, ENEMY, TEAM, COIN, RANK } from './rules.js';
 import { fireEnemyShot } from './bullets.js';
 import { dropPowerup } from './powerups.js';
 import { dropCoin } from './coins.js';
@@ -26,7 +26,7 @@ export function aimAt(world, x, y) {
 // spec: 등장표 한 줄 { type, x, pattern, dir, drop }
 export function spawnEnemy(world, spec) {
   const def = ENEMY[spec.type];
-  const hp = Math.round(scaledHp(def.hp, world.players.length) * (world.hpMul || 1)); // hpMul: 스테이지 난이도
+  const hp = Math.round(scaledHp(def.hp, world.players.length) * (world.hpMul || 1) * rankMul(world, 'HP_MAX')); // 스테이지·파워 난이도
   world.enemies.push({
     id: world.nextId++,
     type: spec.type,
@@ -52,6 +52,9 @@ export function spawnEnemy(world, spec) {
 }
 
 export const isMedium = (type) => Boolean(ENEMY[type] && ENEMY[type].medium);
+
+// 파워에 따른 강함 배율 (rules.js RANK). key: HP_MAX | FIRE_MAX | SPEED_MAX
+export const rankMul = (world, key) => 1 + RANK[key] * (world.rank || 0);
 
 function move(world, e, def, dt) {
   switch (e.pattern) {
@@ -96,14 +99,14 @@ function move(world, e, def, dt) {
 function shoot(world, e, def, dt) {
   if (e.type === 's2') {
     if (e.y < 0 || e.y > VIEW.H * def.fireMaxY) return;
-    e.fireT -= dt;
+    e.fireT -= dt * rankMul(world, 'FIRE_MAX');
     if (e.fireT <= 0) {
       e.fireT += def.fireEvery;
       fireEnemyShot(world, e.x, e.y + e.r * 0.5, aimAt(world, e.x, e.y), def.bulletSpeed);
     }
   } else if (e.type === 'm1') {
     if (e.phase !== 1) return;
-    e.fireT -= dt;
+    e.fireT -= dt * rankMul(world, 'FIRE_MAX');
     if (e.fireT <= 0) {
       e.fireT += def.fireEvery;
       const center = aimAt(world, e.x, e.y);
@@ -115,7 +118,7 @@ function shoot(world, e, def, dt) {
     }
   } else if (e.type === 'm2') { // 도넛 포대: 머무는 동안 빙글 도는 원형 탄
     if (e.phase !== 1) return;
-    e.fireT -= dt;
+    e.fireT -= dt * rankMul(world, 'FIRE_MAX');
     if (e.fireT <= 0) {
       e.fireT += def.fireEvery;
       for (let i = 0; i < def.ringCount; i++) {

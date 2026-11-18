@@ -178,6 +178,16 @@ export const SHOP = {
 // 스테이지가 오를 때마다 (SPEC-v2 4장): 적 체력 +20%, 적 탄 속도 +8% (스테이지 n은 1 + 0.2 × (n − 1))
 export const DIFFICULTY = { HP_PER_STAGE: 0.2, SHOT_SPEED_PER_STAGE: 0.08 };
 
+// 파워에 따라 적도 강해짐 (2026-11-18 사용자 결정: 풀파워가 너무 쉬움)
+// 총알 단계 FROM_POWER 이하는 그대로, 그 위로 갈수록 늘어 최대 단계(8)에서 아래 값만큼 강해짐
+// 같이 할 때는 살아 있는 사람들의 평균 단계. 체력은 적이 나타날 때 정해짐 (도중에 단계가 떨어져도 그대로)
+export const RANK = {
+  FROM_POWER: 3,
+  HP_MAX: 0.4,     // 적·보스 체력 최대 +40%
+  FIRE_MAX: 0.25,  // 적·보스 발사 빈도 최대 +25%
+  SPEED_MAX: 0.1,  // 적 탄 속도 최대 +10%
+};
+
 // 스테이지 1~5 (SPEC-v2 4장). 등장표는 stage1.js ~ stage5.js, 묶음은 stages.js
 export const STAGES = {
   COUNT: 5,

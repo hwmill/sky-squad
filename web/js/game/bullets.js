@@ -1,5 +1,5 @@
 // 총알: 객체 풀로 재사용해서 매 프레임 새 객체를 만들지 않는다 (폰에서 끊김 방지)
-import { VIEW, SHOT, ENEMY_SHOT } from './rules.js';
+import { VIEW, SHOT, ENEMY_SHOT, RANK } from './rules.js';
 
 export function createPool(max) {
   return { list: [], free: [], max };
@@ -48,7 +48,7 @@ export function fireShot(world, x, y, angleDeg, owner) {
 export function fireEnemyShot(world, x, y, angle, baseSpeed) {
   const b = take(world.eshots);
   if (!b) return;
-  const speed = baseSpeed * (world.shotMul || 1);
+  const speed = baseSpeed * (world.shotMul || 1) * (1 + RANK.SPEED_MAX * (world.rank || 0)); // 스테이지·파워 난이도
   b.x = x;
   b.y = y;
   b.vx = Math.cos(angle) * speed;
