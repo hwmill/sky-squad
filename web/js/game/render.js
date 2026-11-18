@@ -401,7 +401,8 @@ export function createRenderer(canvas) {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(x, y, w, 8);
     ctx.fillStyle = b.phase >= 2 ? '#ff5b5b' : '#ffd23f';
-    const ratio = b.parts ? bossHpRatio(b) : b.hp / b.maxHp; // 와플 거북선은 포대까지 합쳐서
+    // 와플 거북선은 포대까지 합쳐서 (게스트 화면은 방장이 이미 합친 퍼센트를 보냄)
+    const ratio = b.parts && Number.isFinite(b.parts[0]?.maxHp) ? bossHpRatio(b) : b.hp / b.maxHp;
     ctx.fillRect(x, y, w * Math.max(0, ratio), 8);
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold 10px ${FONT}`;

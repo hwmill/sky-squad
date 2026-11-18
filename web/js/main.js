@@ -5,12 +5,13 @@
 import { createWorld, startLoop, continueGame, giveUp, nextRound, goToStage } from './game/engine.js';
 import { isLastStage } from './game/stages.js';
 import { updateRecords } from './game/records.js';
-import { openShopScreen, showStageClear } from './ui/shop-screen.js';
+import { openShopScreen, localShop, showStageClear } from './ui/shop-screen.js';
+import { openShop, buy as shopBuy, undo as shopUndo, itemById, shopStateOf, applyShopState } from './game/shop.js';
 import { createRenderer } from './game/render.js';
 import { createInput } from './game/input.js';
 import { createSound } from './game/sound.js';
 import { movePlayer } from './game/player.js';
-import { VIEW, PLAYER, SHOT, NETPLAY, STAGES, RECORD } from './game/rules.js';
+import { VIEW, PLAYER, SHOT, NETPLAY, STAGES, RECORD, SHOP } from './game/rules.js';
 import { encodeSnapshot, decodeSnapshot, createGuestView } from './net/sync.js';
 import { connectRoom } from './net/room.js';
 import { backoffDelay } from './net/backoff.js';
@@ -72,6 +73,7 @@ let netEvents = [];            // 방장: 다음 스냅샷에 실을 효과 사�
 let lastSnapAt = 0;
 let stageClearTimer = 0;       // 혼자 하기: 클리어 결과 → 상점으로 넘어가는 타이머
 let endingRaf = 0;             // 엔딩 장면 그리기
+let coop = null;               // 같이 하기 방장: 클리어·상점 진행 { phase, shops, ready, deadline, timer, ui }
 
 // FPS 측정 (개발 모드)
 let fps = 0;
@@ -97,6 +99,7 @@ function stopGames() {
   clearTimeout(stageClearTimer);
   cancelAnimationFrame(endingRaf);
   endingRaf = 0;
+  closeCoop();
   if (loop) { loop.pause(); loop = null; }
   if (guest) { cancelAnimationFrame(guest.raf); guest = null; }
   screens.hideContinue();
@@ -153,7 +156,7 @@ function startLocalGame(slots, seed) {
   stopIdle();
   stopGames();
   input.reset();
-  world = createWorld({ slots, seed, economy: mode === 'solo' }); // 코인·상점은 혼자 하기만 (같이 하기는 9단계)
+  world = createWorld({ slots, seed, economy: true }); // 코인·상점 (같이 하기는 방장이 판정)
   if (DEBUG_COINS && mode === 'solo') world.players[0].coins = DEBUG_COINS;
   if (DEBUG_POWER) for (const p of world.players) p.power = DEBUG_POWER;
   if (DEBUG_STAGE > 1 && mode === 'solo') goToStage(world, DEBUG_STAGE);
@@ -181,6 +184,7 @@ function finish(w) {
   loop.pause();
   drawFrame(w, performance.now()); // 마지막 사건(게임 오버·클리어 소리)까지 처리
   if (mode === 'solo' && w.state === 'clear') { stageClear(w); return; }
+  if (mode === 'host' && room && w.state === 'clear') { hostStageClear(w); return; }
   if (mode === 'host' && room) {
     sendSnapshot(true);
     room.conn.send({ t: 'end' }); // 서버: 다시 시작할 수 있게
@@ -192,7 +196,7 @@ function finish(w) {
 function stageClear(w) {
   const p = myPlayer(w.players);
   const rec = record(p.score, w.round);
-  if (isLastStage(w.round)) { showEnding(w, p, rec); return; }
+  if (isLastStage(w.round)) { showEnding(p.score, rec); return; }
   stageClearTimer = showStageClear({
     round: w.round,
     score: p.score,
@@ -202,12 +206,13 @@ function stageClear(w) {
     newBest: rec.newScore,
   }, () => {
     if (world !== w || !loop) return;
-    openShopScreen(p, {
+    const ui = openShopScreen(localShop(p, {
       onBuy: () => {
         sound.handle([{ type: 'powerup' }], mySlot);
         renderer.draw(w, performance.now(), { slot: mySlot }); // 뒤 화면의 코인 수도 갱신
       },
       onDone: () => {
+        ui.close();
         if (world !== w || !loop) return;
         nextRound(w);
         record(p.score, w.round); // 새 스테이지에 도착 = 최고 도달 스테이지 후보
@@ -215,14 +220,215 @@ function stageClear(w) {
         screens.hideAll();
         loop.resume(); // 화면에 "STAGE 2 · 노을 구름" 제목이 2초 나옴
       },
-    });
+    }));
   });
 }
 
+// ===================================================================== 같이 하기: 클리어 → 상점 → 다음 스테이지 (9단계)
+// 방장이 모두의 코인·구매를 판정한다. 상점 중에는 게임이 멈춰 스냅샷도 보내지 않고, 바뀔 때만 shopst를 보냄
+const secondsLeft = (deadline) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+
+function closeCoop() {
+  if (!coop) return;
+  clearTimeout(coop.timer);
+  if (coop.ui) coop.ui.close();
+  coop = null;
+}
+
+function hostStageClear(w) {
+  const p = myPlayer(w.players);
+  const rec = record(p.score, w.round);
+  const last = isLastStage(w.round);
+  const coins = {};
+  const nomiss = {};
+  for (const q of w.players) { coins[q.slot] = q.stageCoins; nomiss[q.slot] = q.missed ? 0 : 1; }
+  sendSnapshot(true);
+  room.conn.send({ t: 'ev', e: 'clear', stage: w.round, last: last ? 1 : 0, coins, nomiss });
+  if (last) {
+    room.conn.send({ t: 'end' }); // 서버: 다시 시작할 수 있게
+    showEnding(p.score, rec);
+    return;
+  }
+  coop = { phase: 'clear', timer: 0 };
+  stageClearTimer = showStageClear({
+    round: w.round, score: p.score, stageCoins: p.stageCoins, nomiss: !p.missed, best: rec.score, newBest: rec.newScore,
+  }, () => hostOpenShop(w));
+}
+
+// 다음 스테이지에 함께 갈 사람: 관전 중이 아니고 자리에 연결돼 있는 사람
+function shopMembers() {
+  if (!world || !room) return [];
+  return world.players
+    .filter((q) => !q.spectator && room.members.some((m) => m.slot === q.slot && !m.away))
+    .map((q) => q.slot);
+}
+
+function shopLabel(deadline, readyList, mine) {
+  const sec = secondsLeft(deadline);
+  const need = shopMembers().length || readyList.length;
+  if (mine) return `친구를 기다리는 중… (${readyList.length}/${need} 준비) ${sec}초`;
+  return `준비 완료 ✔ (${sec}초)`;
+}
+
+function sendShopState() {
+  if (!coop || coop.phase !== 'shop' || !room) return;
+  const p = {};
+  for (const slot of shopMembers()) {
+    const q = world.players.find((x) => x.slot === slot);
+    p[slot] = shopStateOf(coop.shops.get(slot), q);
+  }
+  room.conn.send({ t: 'shopst', p, ready: [...coop.ready], n: Object.keys(p).length, left: coop.deadline - Date.now() });
+}
+
+function hostOpenShop(w) {
+  if (world !== w || !room || !coop) return;
+  const shops = new Map(w.players.map((q) => [q.slot, openShop()]));
+  coop = { phase: 'shop', shops, ready: new Set(), deadline: Date.now() + SHOP.MULTI_SECONDS * 1000, timer: 0, ui: null };
+  room.conn.send({ t: 'shop', open: true, left: SHOP.MULTI_SECONDS * 1000 });
+  sendShopState();
+  const me = myPlayer(w.players);
+  const myShop = shops.get(mySlot);
+  const c = coop;
+  coop.ui = openShopScreen({
+    player: () => me,
+    shop: () => myShop,
+    buy(id) {
+      const r = shopBuy(myShop, me, id);
+      if (r.ok) { sound.handle([{ type: 'powerup' }], mySlot); sendShopState(); }
+      return r;
+    },
+    undo() { const id = shopUndo(myShop, me); if (id) sendShopState(); return id; },
+    next() { c.ready.add(mySlot); sendShopState(); checkShopDone(w); },
+    nextLabel: () => shopLabel(c.deadline, [...c.ready], c.ready.has(mySlot)),
+    locked: () => c.ready.has(mySlot),
+  });
+  coop.timer = setTimeout(() => hostCloseShop(w), SHOP.MULTI_SECONDS * 1000);
+}
+
+// (방장) 게스트의 buy·undo·ready 요청 판정
+function onShopRequest(m) {
+  if (mode !== 'host' || !coop || coop.phase !== 'shop' || coop.ready.has(m.s)) return;
+  const q = world.players.find((x) => x.slot === m.s);
+  const shop = coop.shops.get(m.s);
+  if (!q || !shop || q.spectator) return;
+  if (m.t === 'buy' && itemById(m.item)) shopBuy(shop, q, m.item);
+  else if (m.t === 'undo') shopUndo(shop, q);
+  else if (m.t === 'ready') coop.ready.add(m.s);
+  sendShopState();
+  if (coop.ui) coop.ui.refresh();
+  checkShopDone(world);
+}
+
+function checkShopDone(w) {
+  if (!coop || coop.phase !== 'shop') return;
+  const need = shopMembers();
+  if (need.every((s) => coop.ready.has(s))) hostCloseShop(w);
+}
+
+function hostCloseShop(w) {
+  if (!coop || coop.phase !== 'shop' || world !== w) return;
+  closeCoop();
+  if (room) room.conn.send({ t: 'shop', open: false });
+  nextRound(w);
+  record(myPlayer(w.players).score, w.round);
+  input.reset();
+  screens.hideAll();
+  lastSnapAt = 0;
+  if (loop) loop.resume();
+}
+
+// ----------------------------------------------------------------- 게스트 쪽
+function onGuestEvent(m) {
+  if (!guest || m.e !== 'clear') return;
+  const latest = guest.view.latest;
+  const me = latest ? myPlayer(latest.players) : null;
+  const score = me ? me.score : 0;
+  const rec = record(score, m.stage);
+  guest.paused = true; // 상점이 끝날 때까지 입력·끊김 확인 멈춤
+  screens.hideContinue();
+  if (m.last) {
+    guest.ended = true;
+    cancelAnimationFrame(guest.raf);
+    showEnding(score, rec);
+    return;
+  }
+  guest.coop = { phase: 'clear' };
+  showStageClear({
+    round: m.stage, score, stageCoins: (m.coins && m.coins[mySlot]) || 0, nomiss: Boolean(m.nomiss && m.nomiss[mySlot]),
+    best: rec.score, newBest: rec.newScore,
+  }); // 상점은 방장이 열어 줌
+}
+
+function onGuestShop(m) {
+  if (!guest) return;
+  if (!m.open) {
+    if (guest.coop && guest.coop.ui) guest.coop.ui.close();
+    guest.coop = null;
+    guest.paused = false;
+    guest.view.clear(); // 지난 스테이지 화면과 섞이지 않게
+    guest.lastSnapAt = performance.now();
+    input.reset();
+    screens.hideAll();
+    return;
+  }
+  guest.paused = true;
+  if (guest.coop && guest.coop.phase === 'shop') { // 다시 연결됐을 때 등: 시간만 맞춤
+    guest.coop.deadline = Date.now() + m.left;
+    screens.showOnly('shop');
+    guest.coop.ui.refresh();
+    return;
+  }
+  const c = {
+    phase: 'shop',
+    deadline: Date.now() + m.left,
+    ready: [],
+    sentReady: false,
+    joined: false, // 방장이 보낸 상태에 내 자리가 있어야 살 수 있음 (관전 중이면 없음)
+    p: { slot: mySlot, coins: 0, power: 1, rapidLv: 0, wingsLv: 0, bombs: 0, lives: 0, shieldNext: 0, magnetBig: false },
+    shop: { history: [], lifeBought: 0 },
+    ui: null,
+  };
+  guest.coop = c;
+  c.ui = openShopScreen({
+    player: () => c.p,
+    shop: () => c.shop,
+    // 결과는 방장이 보낸 shopst로 화면에 반영. 연결이 끊겨 못 보냈으면 안내만
+    buy(id) { if (!sendShop({ t: 'buy', item: id })) return { ok: false, reason: NOT_SENT }; return null; },
+    undo() { sendShop({ t: 'undo' }); return null; },
+    next() { if (sendShop({ t: 'ready' })) c.sentReady = true; },
+    nextLabel: () => {
+      if (!c.joined) return `관전 중이에요 (${secondsLeft(c.deadline)}초)`;
+      const mine = c.sentReady || c.ready.includes(mySlot);
+      return mine ? `친구를 기다리는 중… (${c.ready.length}/${c.need || '?'} 준비) ${secondsLeft(c.deadline)}초` : `준비 완료 ✔ (${secondsLeft(c.deadline)}초)`;
+    },
+    locked: () => !c.joined || c.sentReady || c.ready.includes(mySlot),
+  });
+}
+
+const NOT_SENT = '연결이 끊겼어요. 다시 연결되면 눌러 주세요.';
+function sendShop(msg) {
+  const ok = Boolean(room && room.conn && !room.recon && room.conn.send(msg));
+  if (!ok) screens.toast(NOT_SENT);
+  return ok;
+}
+
+function onGuestShopState(m) {
+  const c = guest && guest.coop;
+  if (!c || c.phase !== 'shop') return;
+  const mine = m.p && m.p[mySlot];
+  c.joined = Boolean(mine);
+  if (mine) applyShopState(c.p, c.shop, mine);
+  c.ready = Array.isArray(m.ready) ? m.ready : [];
+  c.need = m.n || 0;
+  if (Number.isFinite(m.left)) c.deadline = Date.now() + m.left;
+  if ($('shop').hidden) screens.showOnly('shop'); // 연결이 끊겼다 돌아온 뒤 등
+  c.ui.refresh();
+}
+
 // 엔딩: 과자성 장면 + 최종 점수 + 처음부터
-function showEnding(w, p, rec) {
+function showEnding(score, rec) {
   stopIdle();
-  screens.showEnding({ score: p.score, best: rec.score, newBest: rec.newScore, bestStage: rec.stage });
+  screens.showEnding({ score, best: rec.score, newBest: rec.newScore, bestStage: rec.stage });
   const frame = (now) => {
     renderer.drawEnding(now, [mySlot]);
     endingRaf = requestAnimationFrame(frame);
@@ -270,6 +476,8 @@ function startGuestGame() {
 function onGuestSnapshot(msg) {
   if (!guest || guest.ended) return;
   const s = decodeSnapshot(msg);
+  // 상점(클리어 결과) 중인데 게임이 다시 움직이는 상태가 옴 = 내가 끊긴 사이 상점이 끝남 → 게임으로
+  if (guest.coop && s.state === 'play') onGuestShop({ open: false });
   guest.lastSnapAt = performance.now();
   guest.view.push(s, guest.lastSnapAt);
   renderer.addEvents(s.events);
@@ -281,11 +489,16 @@ function onGuestSnapshot(msg) {
     guest.local.y = p.y;
     guest.lastSpawn = p.spawn;
   }
-  if (s.state === 'over' || s.state === 'clear') {
+  if (s.state === 'clear') { // 스테이지 클리어: 방장의 ev(결과)·shop(상점) 신호를 기다림
+    guest.paused = true;
+    screens.hideContinue();
+    return;
+  }
+  if (s.state === 'over') {
     guest.ended = true;
     cancelAnimationFrame(guest.raf);
     screens.hideContinue();
-    showMyResult(s.state === 'clear', p ? p.score : 0);
+    showMyResult(false, p ? p.score : 0);
   }
 }
 
@@ -299,6 +512,7 @@ function guestFrame(now) {
   const latest = guest.view.latest;
   const p = latest ? myPlayer(latest.players) : null;
   const alive = Boolean(p && p.lives > 0);
+  if (p) guest.local.wingsLv = p.wingsLv; // 날쌘 날개 (내 비행기는 내 폰에서 움직이므로)
   const inp = input.read();
   if (alive && !guest.paused) {
     movePlayer(guest.local, inp);
@@ -406,12 +620,26 @@ function resumeAfterReconnect(r) {
   clearTimeout(r.recon.timer);
   r.recon = null;
   screens.toast('다시 연결됐어요.');
-  if (mode === 'host' && world && loop) {
+  if (mode === 'host' && world && loop && coop) {
+    // 클리어 결과·상점 중이었으면 그 화면으로 (게임은 상점이 끝날 때 다시 움직임)
+    if (coop.phase === 'shop') {
+      screens.showOnly('shop');
+      coop.ui.refresh();
+      r.conn.send({ t: 'shop', open: true, left: coop.deadline - Date.now() });
+      sendShopState();
+    } else {
+      screens.showOnly('stageclear');
+    }
+  } else if (mode === 'host' && world && loop) {
     if (!document.hidden) {
       screens.hideAll();
       r.conn.send({ t: 'resume' });
       loop.resume();
     }
+  } else if (mode === 'guest' && guest && guest.coop) {
+    guest.lastSnapAt = performance.now();
+    screens.showOnly(guest.coop.phase === 'shop' ? 'shop' : 'stageclear');
+    if (guest.coop.ui) guest.coop.ui.refresh();
   } else if (mode === 'guest' && guest) {
     guest.paused = false;
     guest.lastSnapAt = performance.now();
@@ -450,6 +678,8 @@ function roomHandlers(r) {
           const p = world.players.find((q) => q.slot === m.slot);
           if (p) { p.lives = 0; p.spectator = true; p.continueT = 0; }
         }
+        // 상점 중이면 준비 인원이 바뀜 (돌아오지 않은 사람은 구매 없이 다음 스테이지에서 제외)
+        if (coop && coop.phase === 'shop') { sendShopState(); checkShopDone(world); }
       }
       refreshRoom();
     },
@@ -471,7 +701,7 @@ function roomHandlers(r) {
       screens.showPause('방장이 잠시 자리를 비웠어요. 기다려 주세요…');
     },
     onResume() {
-      if (!guest || r.recon) return;
+      if (!guest || r.recon || guest.coop) return;
       guest.paused = false;
       guest.lastSnapAt = performance.now();
       screens.hideAll();
@@ -485,7 +715,17 @@ function roomHandlers(r) {
     onHostBack() { screens.toast('방장이 돌아왔어요.'); }, // 실제로 다시 움직이는 건 방장의 resume 때
     // (방장에게) 게스트 연결 끊김·돌아옴
     onAway(slot) { screens.toast(`${nickOf(r, slot)}님 연결이 끊겼어요. 15초 기다릴게요.`); },
-    onBack(slot) { screens.toast(`${nickOf(r, slot)}님이 돌아왔어요.`); },
+    onBack(slot) {
+      screens.toast(`${nickOf(r, slot)}님이 돌아왔어요.`);
+      if (coop && coop.phase === 'shop') { // 돌아온 사람에게 상점을 다시 열어 줌
+        r.conn.send({ t: 'shop', open: true, left: coop.deadline - Date.now() });
+        sendShopState();
+      }
+    },
+    onEvent: onGuestEvent,
+    onShop: onGuestShop,
+    onShopState: onGuestShopState,
+    onShopRequest,
     onHostLeft() {
       if (room !== r) return;
       if (r.mySlot === 1) exitWithNotice('게임이 끝났어요', '오래 자리를 비워서 게임방이 닫혔어요.');

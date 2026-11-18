@@ -31,6 +31,10 @@ export function connectRoom(roomId, token, handlers) {
       case 'back': handlers.onBack?.(m.slot); break;        // (방장에게) 게스트 돌아옴
       case 'hostaway': handlers.onHostAway?.(); break;      // (게스트에게) 방장 연결 끊김
       case 'hostback': handlers.onHostBack?.(); break;      // (게스트에게) 방장 돌아옴
+      case 'ev': handlers.onEvent?.(m); break;              // (게스트에게) 스테이지 클리어 등
+      case 'shop': handlers.onShop?.(m); break;             // (게스트에게) 상점 열림·닫힘
+      case 'shopst': handlers.onShopState?.(m); break;      // (게스트에게) 구매 결과·준비 상태
+      case 'buy': case 'undo': case 'ready': handlers.onShopRequest?.(m); break; // (방장에게) 게스트 상점 요청
       case 'error': handlers.onError?.(m.error); break;
       default: break;
     }

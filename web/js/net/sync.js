@@ -1,6 +1,7 @@
 // 같이 하기 동기화: 방장 세계 → 짧은 스냅샷, 게스트는 스냅샷 사이를 보간해서 그린다.
 // 화면(DOM)을 쓰지 않으므로 Node에서 테스트할 수 있다.
-import { SHOT, ENEMY, NETPLAY } from '../game/rules.js';
+import { SHOT, ENEMY, NETPLAY, BOSSES } from '../game/rules.js';
+import { bossHpRatio, laserActive } from '../game/boss.js';
 
 const STATES = ['play', 'continue', 'over', 'clear'];
 const ETYPES = ['s1', 's2', 'm1', 's3', 'm2']; // 뒤에만 추가 (번호가 바뀌지 않게)
@@ -24,13 +25,23 @@ export function encodeSnapshot(world, events = []) {
     p: world.players.map((p) => [
       p.slot, r(p.x), r(p.y), p.lives, p.bombs, p.power, p.score,
       r(p.invuln * 10), p.bombT > 0 ? 1 : 0, Math.ceil(p.continueT), p.spectator ? 1 : 0, p.spawn,
+      p.coins || 0, p.shield > 0 ? 1 : 0, p.wingsLv || 0, // 2차: 코인(HUD), 보호막 방울, 날쌘 날개(게스트 이동 속도)
     ]),
     e: world.enemies.filter((e) => !e.dead).map((e) => [e.id, ETYPES.indexOf(e.type), r(e.x), r(e.y), r((100 * e.hp) / e.maxHp), e.hitT > 0 ? 1 : 0]),
-    b: b && !b.dead ? [r(b.x), r(b.y), r((100 * b.hp) / b.maxHp), b.phase, b.entering ? 1 : 0, b.hitT > 0 ? 1 : 0, Math.max(0, BKINDS.indexOf(b.kind))] : 0,
+    b: b && !b.dead ? [
+      r(b.x), r(b.y), r((100 * (b.parts ? bossHpRatio(b) : b.hp / b.maxHp))), b.phase, b.entering ? 1 : 0, b.hitT > 0 ? 1 : 0,
+      Math.max(0, BKINDS.indexOf(b.kind)), Math.round((b.spin || 0) * 100) / 100,
+      b.parts ? b.parts.map((q) => (q.dead ? 0 : q.hitT > 0 ? 2 : 1)) : 0, // 와플 포대: 0 부서짐, 1 있음, 2 맞는 중
+    ] : 0,
     u: world.powerups.map((u) => [UKINDS.indexOf(u.kind), r(u.x), r(u.y)]),
     m: shots,
     q: eshots,
     v: events,
+    // 2차: 스테이지 번호·진행 시각(제목 표시), 떨어진 코인, 번개 레이저
+    r: world.round || 1,
+    g: Math.round(((world.stage && world.stage.t) || 0) * 10),
+    c: (world.coins || []).flatMap((c) => [r(c.x), r(c.y), c.value]),
+    l: (world.lasers || []).flatMap((l) => [r(l.x), r(l.y0), l.w, laserActive(l) ? 1 : 0]),
   };
 }
 
@@ -46,15 +57,31 @@ export function decodeSnapshot(m) {
     players: m.p.map((a) => ({
       slot: a[0], x: a[1], y: a[2], lives: a[3], bombs: a[4], power: a[5], score: a[6],
       invuln: a[7] / 10, bombT: a[8], continueT: a[9], spectator: a[10] === 1, spawn: a[11],
+      coins: a[12] || 0, shield: a[13] || 0, wingsLv: a[14] || 0,
     })),
     enemies: m.e.map((a) => ({ id: a[0], type: ETYPES[a[1]], x: a[2], y: a[3], hp: a[4], hit: a[5] })),
-    boss: m.b ? { x: m.b[0], y: m.b[1], hp: m.b[2], phase: m.b[3], entering: m.b[4] === 1, hit: m.b[5], kind: BKINDS[m.b[6]] || 'pudding' } : null,
+    boss: m.b ? {
+      x: m.b[0], y: m.b[1], hp: m.b[2], phase: m.b[3], entering: m.b[4] === 1, hit: m.b[5],
+      kind: BKINDS[m.b[6]] || 'pudding', spin: m.b[7] || 0, parts: Array.isArray(m.b[8]) ? m.b[8] : null,
+    } : null,
     powerups: m.u.map((a) => ({ kind: UKINDS[a[0]], x: a[1], y: a[2] })),
     shots,
     eshots,
     events: Array.isArray(m.v) ? m.v : [],
+    round: m.r || 1,
+    stageT: (m.g || 0) / 10,
+    coins: unflat(m.c, 3, (a) => ({ x: a[0], y: a[1], value: a[2], t: 0 })),
+    // 게스트 화면용 레이저: active면 바로 번개, 아니면 경고선으로 보이게 t·warn을 맞춤
+    lasers: unflat(m.l, 4, (a) => ({ x: a[0], y0: a[1], w: a[2], t: a[3] ? 1 : 0, warn: a[3] ? 0 : 1, dur: 2 })),
   };
 }
+
+const unflat = (arr, n, make) => {
+  const out = [];
+  if (!Array.isArray(arr)) return out;
+  for (let i = 0; i + n - 1 < arr.length; i += n) out.push(make(arr.slice(i, i + n)));
+  return out;
+};
 
 const lerp = (a, b, k) => a + (b - a) * k;
 
@@ -100,6 +127,11 @@ export function createGuestView() {
       boss = {
         x: ba ? lerp(ba.x, bb.x, k) : bb.x, y: ba ? lerp(ba.y, bb.y, k) : bb.y,
         hp: bb.hp, maxHp: 100, phase: bb.phase, entering: bb.entering, hitT: bb.hit ? 1 : 0, dead: false, kind: bb.kind,
+        spin: bb.spin,
+        // 와플 포대: 위치는 규칙표에서, 상태만 받음 (체력 막대는 hp%가 이미 포대 포함)
+        parts: bb.parts && bb.kind === 'waffleShip'
+          ? BOSSES.waffleShip.TURRET.spots.map(([dx, dy], i) => ({ dx, dy, r: BOSSES.waffleShip.TURRET.r, dead: !bb.parts[i], hitT: bb.parts[i] === 2 ? 1 : 0 }))
+          : null,
       };
     }
 
@@ -136,6 +168,12 @@ export function createGuestView() {
       shots: { list: shots },
       eshots: { list: eshots },
       events: [],
+      // 2차: 배경·제목·코인·레이저 (가장 최근 값)
+      economy: true,
+      round: latest.round,
+      stage: { t: latest.stageT },
+      coins: latest.coins,
+      lasers: latest.lasers,
     };
   }
 

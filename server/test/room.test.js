@@ -119,6 +119,40 @@ describe('게임방', () => {
     expect(g3.inbox.some((m) => m.f === 99)).toBe(false);
   });
 
+  it('2차 상점: 게스트 buy·undo·ready는 방장에게 (자리는 서버가, 다른 값은 버림), 방장 shop·shopst는 게스트 전원에게', async () => {
+    const a = await register('상점장');
+    const b = await register('손님1');
+    const c = await register('손님2');
+    const roomId = await createRoom(a);
+    const host = await openWs(`/ws/room/${roomId}`, a.token);
+    await host.next((m) => m.t === 'seat');
+    const g2 = await openWs(`/ws/room/${roomId}`, b.token);
+    await g2.next((m) => m.t === 'seat');
+    const g3 = await openWs(`/ws/room/${roomId}`, c.token);
+    await g3.next((m) => m.t === 'seat');
+
+    g2.send({ t: 'buy', s: 3, item: 'power', coins: 99999 }); // 자리·코인을 속여도
+    expect(await host.next((m) => m.t === 'buy')).toEqual({ t: 'buy', s: 2, item: 'power' });
+    g3.send({ t: 'undo', s: 1 });
+    expect(await host.next((m) => m.t === 'undo')).toEqual({ t: 'undo', s: 3 });
+    g2.send({ t: 'ready' });
+    expect(await host.next((m) => m.t === 'ready')).toEqual({ t: 'ready', s: 2 });
+
+    // 이상한 값은 무시: 상품 이름이 문자열이 아니거나 너무 김, 모르는 종류
+    g2.send({ t: 'buy', item: 123 });
+    g2.send({ t: 'buy', item: 'x'.repeat(40) });
+    g2.send({ t: 'shopst', p: {} });
+    g2.send({ t: 'ready' });
+    expect(await host.next((m) => m.t === 'ready')).toEqual({ t: 'ready', s: 2 });
+    expect(host.inbox.some((m) => m.t === 'buy' || m.t === 'shopst')).toBe(false);
+
+    host.send({ t: 'shop', open: true, left: 45000 });
+    expect(await g2.next((m) => m.t === 'shop')).toEqual({ t: 'shop', open: true, left: 45000 });
+    expect(await g3.next((m) => m.t === 'shop')).toEqual({ t: 'shop', open: true, left: 45000 });
+    host.send({ t: 'shopst', p: { 2: { c: 100 } }, ready: [2] });
+    expect((await g3.next((m) => m.t === 'shopst')).ready).toEqual([2]);
+  });
+
   it('시작은 방장만, 시작 후에는 새로 들어올 수 없고, 끝나면(end) 다시 시작 가능', async () => {
     const a = await register('방장2');
     const b = await register('손님');

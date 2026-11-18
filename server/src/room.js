@@ -5,8 +5,17 @@
 import { DurableObject } from 'cloudflare:workers';
 import { LIMITS, holdMs, createRateLimiter, json, errorJson } from './util.js';
 
-// 방장이 게스트에게 그대로 넘기는 메시지 종류
-const HOST_RELAY = new Set(['st', 'ev', 'pause', 'resume', 'start']);
+// 방장이 게스트에게 그대로 넘기는 메시지 종류 (shop·shopst: 2차 상점 시작·구매 결과)
+const HOST_RELAY = new Set(['st', 'ev', 'pause', 'resume', 'start', 'shop', 'shopst']);
+
+// 게스트가 방장에게 보낼 수 있는 메시지와 남길 값 (나머지 값은 버림)
+// in: 조작 입력 / buy·undo·ready: 2차 상점 구매·되돌리기·준비 완료
+const GUEST_RELAY = {
+  in: null, // 1차 그대로 전달 (x, y, k, b, c, g)
+  buy: (m) => (typeof m.item === 'string' && m.item.length <= 16 ? { item: m.item } : null),
+  undo: () => ({}),
+  ready: () => ({}),
+};
 
 export class GameRoom extends DurableObject {
   constructor(ctx, env) {
@@ -95,13 +104,16 @@ export class GameRoom extends DurableObject {
         return;
       }
 
-      // 게스트: 입력만 방장에게. 자리 번호(s)는 서버가 붙임 (속이기 방지). 4KB 초과·다른 종류는 무시
+      // 게스트: 입력·상점 요청만 방장에게. 자리 번호(s)는 서버가 붙임 (속이기 방지). 4KB 초과·다른 종류는 무시
       if (message.length > LIMITS.BODY_MAX) return;
       let msg;
       try { msg = JSON.parse(message); } catch { return; }
-      if (!msg || msg.t !== 'in') return;
+      if (!msg || typeof msg.t !== 'string' || !Object.hasOwn(GUEST_RELAY, msg.t)) return;
+      const pick = GUEST_RELAY[msg.t];
+      const body = pick ? pick(msg) : msg;
+      if (!body) return;
       const host = this.socketOf(1);
-      if (host) safeSend(host, { ...msg, s: att.slot });
+      if (host) safeSend(host, { ...body, t: msg.t, s: att.slot });
     } catch (e) {
       console.error('GameRoom 메시지 처리 오류', e && e.stack ? e.stack : String(e));
     }

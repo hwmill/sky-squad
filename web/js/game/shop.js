@@ -81,6 +81,28 @@ export function undo(shop, p) {
   return last.id;
 }
 
+// ------------------------------------------------------------ 같이 하기 (9단계)
+// 방장 → 게스트: 상점에 필요한 내 상태만 짧게 { c: 코인, o: [총알, 연사, 날개, 폭탄, 목숨, 보호막, 자석], h: 되돌릴 상품, lb: 이번 상점 생명 수 }
+export function shopStateOf(shop, p) {
+  const last = shop.history[shop.history.length - 1];
+  return {
+    c: p.coins,
+    o: [p.power, p.rapidLv, p.wingsLv, p.bombs, p.lives, p.shieldNext, p.magnetBig ? 1 : 0],
+    h: last ? last.id : '',
+    lb: shop.lifeBought,
+  };
+}
+
+// 게스트: 받은 상태를 화면용 플레이어·상점 객체에 반영 (판정은 방장이 함, 화면에 "살 수 있음/없음" 표시용)
+export function applyShopState(p, shop, st) {
+  if (!st) return;
+  p.coins = st.c;
+  [p.power, p.rapidLv, p.wingsLv, p.bombs, p.lives, p.shieldNext] = st.o;
+  p.magnetBig = st.o[6] === 1;
+  shop.history = st.h ? [{ id: st.h }] : [];
+  shop.lifeBought = st.lb || 0;
+}
+
 // 상품 효과가 게임 계산에 쓰이는 값
 export const fireRateOf = (p, base) => base * (1 + SHOP.RAPID_STEP * (p.rapidLv || 0));
 export const moveMulOf = (p) => 1 + SHOP.WINGS_STEP * (p.wingsLv || 0);
