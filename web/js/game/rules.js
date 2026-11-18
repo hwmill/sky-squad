@@ -103,7 +103,7 @@ export const ENEMY = {
   },
   // 2차 8단계: 스테이지 2부터 등장
   // s3: 사탕벌 (내려오다 잠깐 멈칫한 뒤 플레이어가 있던 쪽으로 돌진, 사격 없음)
-  s3: { hp: 2, r: 12, speed: 120, score: SCORE.SMALL, aimAfter: 0.9, rushSpeed: 290 },
+  s3: { hp: 2, r: 12, speed: 120, score: SCORE.SMALL, aimAfter: 1.1, rushSpeed: 210 }, // 10단계: 돌진 290 → 210 (아이도 피할 수 있게)
   // m2: 도넛 포대 (내려와 머무르며 빙글빙글 도는 원형 탄, 처치 시 아이템)
   m2: {
     hp: 40, r: 24, speed: 70, score: SCORE.MEDIUM, medium: true,
@@ -141,8 +141,8 @@ export const BOMB_BUTTON = { D: 64, MARGIN: 18, TOUCH_EXTRA: 8 };
 export const COIN = {
   SMALL: 1,          // 소형 적 (떨어진 코인을 주워야 획득)
   MEDIUM: 5,         // 중형 적 (큰 코인 1개)
-  BOSS: 50,          // 보스: 살아 있는 전원이 각자 바로 받음
-  CLEAR_BONUS: 100,  // 스테이지 클리어: 살아 있는 전원이 각자
+  BOSS: 40,          // 보스: 살아 있는 전원이 각자 바로 받음 (10단계: 50 → 40)
+  CLEAR_BONUS: 80,   // 스테이지 클리어: 살아 있는 전원이 각자 (10단계: 100 → 80, 한 스테이지 약 150~250 코인)
   NOMISS_BONUS: 50,  // 그 스테이지에서 목숨을 안 잃으면 추가
   LIFE: 4,           // 떨어진 코인이 사라지기까지
   BLINK_AT: 3,       // 이 시각부터 깜박여서 곧 사라짐을 알림
@@ -190,27 +190,27 @@ export const STAGES = {
 export const BOSSES = {
   // 문어 사탕왕: 다리 8개에서 회전 탄
   octopus: {
-    HP: 1000, R: 44, SWAY_RANGE: 110, SWAY_SPEED: 0.7,
+    HP: 750, R: 44, SWAY_RANGE: 110, SWAY_SPEED: 0.7, // 10단계: 1000 → 750 (스테이지 배율 ×1.2 = 900, 푸딩 대장과 같게)
     phases: [
       { at: 1, list: ['LEGS', 'AIMED'], rate: 1 },
       { at: 0.5, list: ['LEGS_REV', 'RING', 'LEGS'], rate: 0.8 },
     ],
-    LEGS: { every: 0.3, arms: 8, turn: 30, speed: 110 },      // 초당 약 27발 (아이도 피할 수 있게)
-    LEGS_REV: { every: 0.24, arms: 8, turn: -40, speed: 120 },
-    AIMED: { every: 0.8, count: 5, spread: 12, speed: 170 },
-    RING: { every: 1.3, count: 20, speed: 110 },
+    LEGS: { every: 0.34, arms: 8, turn: 30, speed: 95 },      // 초당 약 24발, 느리게 (10단계: 스테이지 2는 아이도 깰 수 있게)
+    LEGS_REV: { every: 0.28, arms: 8, turn: -40, speed: 105 },
+    AIMED: { every: 0.9, count: 3, spread: 14, speed: 160 },
+    RING: { every: 1.4, count: 18, speed: 105 },
   },
   // 와플 거북선: 등껍질 포대 4개를 하나씩 부숴야 몸통에 피해가 들어감
   waffleShip: {
     HP: 550, R: 48, SWAY_RANGE: 80, SWAY_SPEED: 0.5,
-    TURRET: { hp: 120, r: 13, every: 1.3, speed: 165, spots: [[-30, -20], [30, -20], [-34, 14], [34, 14]] },
+    TURRET: { hp: 120, r: 13, every: 1.3, speed: 165, spots: [[-22, -20], [22, -20], [-25, 12], [25, 12]] }, // 10단계: 가운데 쪽으로 (보스 가운데를 보고 쏴도 맞게)
     phases: [
       { at: 1, list: ['TURRETS'], rate: 1 },            // 포대가 남아 있는 동안
       { at: 1, list: ['RING', 'SPIRAL'], rate: 0.85 },  // 포대를 다 부순 뒤 (체력과 상관없이)
     ],
     TURRETS: { every: 0.35 }, // 살아 있는 포대가 돌아가며 조준 사격
     RING: { every: 1.2, count: 22, speed: 115 },
-    SPIRAL: { every: 0.08, arms: 3, turn: 170, speed: 125 },
+    SPIRAL: { every: 0.11, arms: 3, turn: 170, speed: 120 }, // 10단계: 초당 37 → 27발
   },
   // 번개 솜사탕: 경고선이 먼저 나오고 잠시 뒤 세로 번개 레이저
   cottonStorm: {
