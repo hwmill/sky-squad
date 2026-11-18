@@ -1,7 +1,7 @@
 // 충돌 판정 (원과 원)
 import { PLAYER, SHOT, ENEMY_SHOT, POWERUP } from './rules.js';
 import { damageEnemy } from './enemies.js';
-import { damageBoss, bossTargetable } from './boss.js';
+import { shotHitsBoss, laserActive } from './boss.js';
 import { hitPlayer, isAlive } from './player.js';
 import { applyPowerup } from './powerups.js';
 
@@ -25,10 +25,7 @@ export function handleCollisions(world) {
         break;
       }
     }
-    if (!s.dead && bossTargetable(boss) && overlap(s.x, s.y, SHOT.R, boss.x, boss.y, boss.r)) {
-      s.dead = true;
-      damageBoss(world, boss, SHOT.DAMAGE, s.owner);
-    }
+    if (!s.dead && boss && shotHitsBoss(world, boss, s.x, s.y, SHOT.R, SHOT.DAMAGE, s.owner)) s.dead = true; // 포대 먼저
   }
 
   for (const p of players) {
@@ -50,6 +47,12 @@ export function handleCollisions(world) {
         }
       }
       if (!hit && boss && !boss.dead && overlap(p.x, p.y, PLAYER.BODY_R, boss.x, boss.y, boss.r * 0.7)) hit = true;
+      // 번개 레이저 (경고선이 끝나고 번쩍이는 동안만)
+      if (!hit && world.lasers) {
+        for (const l of world.lasers) {
+          if (laserActive(l) && p.y >= l.y0 && Math.abs(p.x - l.x) <= l.w / 2 + PLAYER.HITBOX_R) { hit = true; break; }
+        }
+      }
       if (hit) hitPlayer(world, p);
     }
 

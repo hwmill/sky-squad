@@ -2,7 +2,7 @@
 import { VIEW, PLAYER, BOMB, SHOT, CONTINUE, SHOP } from './rules.js';
 import { fireShot, clearPool } from './bullets.js';
 import { damageEnemy } from './enemies.js';
-import { damageBoss } from './boss.js';
+import { damageBossAll } from './boss.js';
 import { initCoins } from './coins.js';
 import { initUpgrades, fireRateOf, moveMulOf } from './shop.js';
 
@@ -81,7 +81,7 @@ export function useBomb(world, p) {
   p.invuln = Math.max(p.invuln, BOMB.INVULN);
   clearPool(world.eshots);
   for (const e of world.enemies) damageEnemy(world, e, BOMB.DAMAGE, p.slot);
-  if (world.boss) damageBoss(world, world.boss, BOMB.DAMAGE, p.slot);
+  if (world.boss) damageBossAll(world, world.boss, BOMB.DAMAGE, p.slot); // 와플 거북선 포대 포함
   world.events.push({ type: 'bomb', x: p.x, y: p.y, slot: p.slot });
   return true;
 }

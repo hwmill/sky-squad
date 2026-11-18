@@ -6,10 +6,11 @@ import { createPool, moveBullets, sweepBullets, clearPool } from './bullets.js';
 import { createPlayer, isAlive, movePlayer, tickPlayer, useBomb, continuePlayer, placeAtStart } from './player.js';
 import { updateCoins, collectCoins, giveClearBonus } from './coins.js';
 import { spawnEnemy, updateEnemies, removeDeadEnemies } from './enemies.js';
-import { createBoss, updateBoss } from './boss.js';
+import { createBoss, updateBoss, updateLasers } from './boss.js';
 import { updatePowerups } from './powerups.js';
 import { handleCollisions } from './collision.js';
 import { STAGE1_TIMELINE } from './stage1.js';
+import { stageInfo } from './stages.js';
 
 // 같은 seed면 같은 결과가 나오는 난수 (mulberry32)
 export function makeRng(seed) {
@@ -46,27 +47,44 @@ export function createWorld({ playerCount = 1, slots = null, seed = 1, timeline 
     clearT: 0,
     economy,
     coins: [],        // 떨어진 코인
-    round: 1,         // 몇 번째 스테이지 (7단계: 스테이지 1 반복, 난이도만 오름)
+    round: 1,         // 몇 번째 스테이지 (1~5)
+    bossAt: STAGE1.BOSS_AT,
+    bossKind: 'pudding',
+    lasers: [],       // 번개 솜사탕 레이저
     hpMul: 1,         // 적 체력 배율
     shotMul: 1,       // 적 탄 속도 배율
   };
 }
 
-// 다음 스테이지 시작 (상점에서 "다음 스테이지로"). 점수·코인·상점 효과는 유지
-export function nextRound(world, timeline = world.timeline) {
-  world.round++;
-  world.hpMul = 1 + DIFFICULTY.HP_PER_STAGE * (world.round - 1);
-  world.shotMul = 1 + DIFFICULTY.SHOT_SPEED_PER_STAGE * (world.round - 1);
-  world.timeline = timeline;
+// 난이도 배율: 스테이지 n은 적 체력 ×(1 + 0.2(n−1)), 적 탄 속도 ×(1 + 0.08(n−1))
+export const stageHpMul = (n) => 1 + DIFFICULTY.HP_PER_STAGE * (n - 1);
+export const stageShotMul = (n) => 1 + DIFFICULTY.SHOT_SPEED_PER_STAGE * (n - 1);
+
+// n번째 스테이지로 (등장표·보스·배율을 바꾸고 화면을 비움). 점수·코인·상점 효과는 유지
+// timeline을 주면 그 등장표로 (테스트용)
+export function goToStage(world, n, timeline = null) {
+  const info = stageInfo(n);
+  world.round = info.no;
+  world.hpMul = stageHpMul(info.no);
+  world.shotMul = stageShotMul(info.no);
+  world.timeline = timeline || info.timeline;
+  world.bossAt = info.bossAt;
+  world.bossKind = info.boss;
   world.stage = { t: 0, next: 0, oneUps: 0, bossSpawned: false };
   world.enemies = [];
   world.boss = null;
   world.powerups = [];
   world.coins = [];
+  world.lasers = [];
   clearPool(world.shots);
   clearPool(world.eshots);
   world.clearT = 0;
   world.state = 'play';
+}
+
+// 다음 스테이지 시작 (상점에서 "다음 스테이지로")
+export function nextRound(world, timeline = null) {
+  goToStage(world, world.round + 1, timeline);
   for (const p of world.players) {
     p.stageCoins = 0;
     p.missed = false;
@@ -89,7 +107,7 @@ function runStage(world, dt) {
   st.t += dt;
   const tl = world.timeline;
   while (st.next < tl.length && tl[st.next].t <= st.t) spawnEnemy(world, tl[st.next++]);
-  if (st.t >= STAGE1.BOSS_AT) {
+  if (st.t >= world.bossAt) {
     st.bossSpawned = true;
     world.boss = createBoss(world);
     world.events.push({ type: 'boss' });
@@ -137,6 +155,7 @@ export function stepWorld(world, inputs = []) {
   moveBullets(world, dt);
   updateEnemies(world, dt);
   if (world.boss) updateBoss(world, world.boss, dt);
+  updateLasers(world, dt);
   updatePowerups(world, dt);
   if (world.economy) updateCoins(world, dt);
 

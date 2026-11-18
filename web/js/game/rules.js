@@ -97,9 +97,18 @@ export const ENEMY = {
   s1: { hp: 2, r: 12, speed: 150, score: SCORE.SMALL, sineAmp: 50, sineSpeed: 2.2 },
   s2: { hp: 4, r: 14, speed: 100, score: SCORE.SMALL, fireDelay: 0.8, fireEvery: 1.8, bulletSpeed: 150, fireMaxY: 0.7 },
   m1: {
-    hp: 30, r: 24, speed: 80, score: SCORE.MEDIUM,
+    hp: 30, r: 24, speed: 80, score: SCORE.MEDIUM, medium: true,
     hoverY: 150, hoverTime: 4.5, leaveSpeed: 60,
     fireEvery: 1.4, fanCount: 5, fanSpread: 60, bulletSpeed: 130,
+  },
+  // 2차 8단계: 스테이지 2부터 등장
+  // s3: 사탕벌 (내려오다 잠깐 멈칫한 뒤 플레이어가 있던 쪽으로 돌진, 사격 없음)
+  s3: { hp: 2, r: 12, speed: 120, score: SCORE.SMALL, aimAfter: 0.9, rushSpeed: 290 },
+  // m2: 도넛 포대 (내려와 머무르며 빙글빙글 도는 원형 탄, 처치 시 아이템)
+  m2: {
+    hp: 40, r: 24, speed: 70, score: SCORE.MEDIUM, medium: true,
+    hoverY: 140, hoverTime: 6, leaveSpeed: 60,
+    fireEvery: 1.6, ringCount: 10, ringTurn: 13, bulletSpeed: 105,
   },
 };
 
@@ -165,5 +174,70 @@ export const SHOP = {
   RESULT_SECONDS: 3,   // 클리어 결과 화면을 보여 주는 시간
 };
 
-// 스테이지가 오를 때마다 (SPEC-v2 4장). 2차 7단계에서는 스테이지 1을 난이도만 올려 반복
+// 스테이지가 오를 때마다 (SPEC-v2 4장): 적 체력 +20%, 적 탄 속도 +8% (스테이지 n은 1 + 0.2 × (n − 1))
 export const DIFFICULTY = { HP_PER_STAGE: 0.2, SHOT_SPEED_PER_STAGE: 0.08 };
+
+// 스테이지 1~5 (SPEC-v2 4장). 등장표는 stage1.js ~ stage5.js, 묶음은 stages.js
+export const STAGES = {
+  COUNT: 5,
+  BOSS_AT: [STAGE1.BOSS_AT, 175, 175, 180, 185], // 스테이지 시작 후 보스 등장 시각
+  TITLE_SECONDS: 2,                              // "STAGE 2 · 노을 구름" 표시 시간
+};
+
+// 스테이지 2~5 보스 (스테이지 1 푸딩 대장은 위의 BOSS). 체력은 기본값, 여기에 인원 보정·난이도 배율을 곱함
+// phases: 체력 비율이 at 이하가 되면 그 단계로 (첫 단계 at: 1). list: 차례로 바꾸는 공격, rate: 발사 간격 배율
+export const BOSSES = {
+  // 문어 사탕왕: 다리 8개에서 회전 탄
+  octopus: {
+    HP: 1000, R: 44, SWAY_RANGE: 110, SWAY_SPEED: 0.7,
+    phases: [
+      { at: 1, list: ['LEGS', 'AIMED'], rate: 1 },
+      { at: 0.5, list: ['LEGS_REV', 'RING', 'LEGS'], rate: 0.8 },
+    ],
+    LEGS: { every: 0.3, arms: 8, turn: 30, speed: 110 },      // 초당 약 27발 (아이도 피할 수 있게)
+    LEGS_REV: { every: 0.24, arms: 8, turn: -40, speed: 120 },
+    AIMED: { every: 0.8, count: 5, spread: 12, speed: 170 },
+    RING: { every: 1.3, count: 20, speed: 110 },
+  },
+  // 와플 거북선: 등껍질 포대 4개를 하나씩 부숴야 몸통에 피해가 들어감
+  waffleShip: {
+    HP: 550, R: 48, SWAY_RANGE: 80, SWAY_SPEED: 0.5,
+    TURRET: { hp: 120, r: 13, every: 1.3, speed: 165, spots: [[-30, -20], [30, -20], [-34, 14], [34, 14]] },
+    phases: [
+      { at: 1, list: ['TURRETS'], rate: 1 },            // 포대가 남아 있는 동안
+      { at: 1, list: ['RING', 'SPIRAL'], rate: 0.85 },  // 포대를 다 부순 뒤 (체력과 상관없이)
+    ],
+    TURRETS: { every: 0.35 }, // 살아 있는 포대가 돌아가며 조준 사격
+    RING: { every: 1.2, count: 22, speed: 115 },
+    SPIRAL: { every: 0.08, arms: 3, turn: 170, speed: 125 },
+  },
+  // 번개 솜사탕: 경고선이 먼저 나오고 잠시 뒤 세로 번개 레이저
+  cottonStorm: {
+    HP: 950, R: 44, SWAY_RANGE: 120, SWAY_SPEED: 0.8,
+    phases: [
+      { at: 1, list: ['LASER', 'AIMED'], rate: 1 },
+      { at: 0.5, list: ['LASER2', 'RING', 'LASER2'], rate: 0.85 },
+    ],
+    LASER: { every: 2.4, count: 1, warn: 1.1, dur: 0.6, width: 18 },
+    LASER2: { every: 2.0, count: 2, warn: 1.0, dur: 0.6, width: 18 },
+    AIMED: { every: 0.7, count: 3, spread: 16, speed: 180 },
+    RING: { every: 1.1, count: 16, speed: 120 },
+  },
+  // 케이크 대마왕: 3단 케이크. 한 단이 부서질 때마다(체력 2/3, 1/3) 패턴이 바뀜
+  cakeKing: {
+    HP: 1200, R: 50, SWAY_RANGE: 90, SWAY_SPEED: 0.55,
+    phases: [
+      { at: 1, list: ['AIMED', 'RING'], rate: 1 },
+      { at: 2 / 3, list: ['SPIRAL', 'AIMED', 'RING'], rate: 0.85 },
+      { at: 1 / 3, list: ['SPIRAL2', 'RING2', 'AIMED'], rate: 0.75 },
+    ],
+    AIMED: { every: 0.75, count: 5, spread: 11, speed: 175 },
+    RING: { every: 1.4, count: 20, speed: 105 },
+    SPIRAL: { every: 0.09, arms: 3, turn: 150, speed: 120 },
+    SPIRAL2: { every: 0.08, arms: 4, turn: -170, speed: 130 },
+    RING2: { every: 1.0, count: 26, speed: 120 },
+  },
+};
+
+// 최고 기록 (SPEC-v2 4장). 기존 최고 점수 키 'sky:best'는 바꾸지 않고, 최고 도달 스테이지는 새 키
+export const RECORD = { BEST_SCORE_KEY: 'sky:best', BEST_STAGE_KEY: 'sky:bestStage' };

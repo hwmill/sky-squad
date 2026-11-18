@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  drawPlayer, drawPlayerIcon, drawEnemy, drawBoss, drawStarShot, drawCoin, drawPop,
+  drawPlayer, drawPlayerIcon, drawEnemy, drawBoss, drawStarShot, drawCoin, drawPop, drawCastle,
   PLAYER_CHARS, ENEMY_CHARS, BOSS_CHARS, ENEMY_SPRITE,
 } from '../web/js/game/sprites.js';
 import { ENEMY } from '../web/js/game/rules.js';
@@ -50,17 +50,22 @@ test('적 5종 + 보스: 번쩍임·2단계 포함 그리기', () => {
       assert.equal(ctx.depth, 0, kind);
     }
   }
+  const parts = [{ dx: -30, dy: -20, r: 13, hitT: 0.1 }, { dx: 30, dy: -20, r: 13, dead: true }];
+  assert.equal(Object.keys(BOSS_CHARS).length, 5);
   for (const kind of Object.keys(BOSS_CHARS)) {
-    for (const phase of [1, 2]) {
+    for (const phase of [1, 2, 3]) {
       const ctx = fakeCtx();
-      drawBoss(ctx, kind, { t: 1, phase, flash: phase === 2 });
-      assert.equal(ctx.depth, 0, kind);
+      drawBoss(ctx, kind, { t: 1, phase, flash: phase === 2, spin: 0.5, parts });
+      assert.equal(ctx.depth, 0, `${kind} ${phase}`);
     }
   }
+  const ctx = fakeCtx();
+  drawCastle(ctx, 1.2);
+  assert.equal(ctx.depth, 0);
 });
 
 test('게임 속 적 종류는 모두 그림이 있음', () => {
-  for (const type of ['s1', 's2', 'm1']) {
+  for (const type of Object.keys(ENEMY).filter((k) => /^[sm]\d$/.test(k))) {
     assert.ok(ENEMY[type], type);
     assert.ok(ENEMY_CHARS[ENEMY_SPRITE[type]], `${type} → 그림`);
   }

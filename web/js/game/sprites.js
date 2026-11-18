@@ -24,10 +24,16 @@ export const ENEMY_CHARS = {
   cookieTank: { name: '쿠키 탱크', size: '중형' },
   donutTurret: { name: '도넛 포대', size: '중형' },
 };
-export const BOSS_CHARS = { pudding: { name: '푸딩 대장', stage: 1 } };
+export const BOSS_CHARS = {
+  pudding: { name: '푸딩 대장', stage: 1 },
+  octopus: { name: '문어 사탕왕', stage: 2 },
+  waffleShip: { name: '와플 거북선', stage: 3 },
+  cottonStorm: { name: '번개 솜사탕', stage: 4 },
+  cakeKing: { name: '케이크 대마왕', stage: 5 },
+};
 
-// 지금 게임 속 적 종류(rules.js) → 그림. 사탕벌·도넛 포대는 8단계에서 등장
-export const ENEMY_SPRITE = { s1: 'jelly', s2: 'macaron', m1: 'cookieTank' };
+// 게임 속 적 종류(rules.js) → 그림
+export const ENEMY_SPRITE = { s1: 'jelly', s2: 'macaron', s3: 'candyBee', m1: 'cookieTank', m2: 'donutTurret' };
 
 export const playerChar = (slot) => PLAYER_CHARS[(slot - 1) % 4];
 
@@ -401,13 +407,38 @@ const ENEMY_DRAW = {
 };
 
 // ------------------------------------------------------------ 보스
-// o.t: 시간 / o.flash: 번쩍 / o.phase: 1·2 (2단계는 더 화남)
+// o.t: 시간 / o.flash: 번쩍 / o.phase: 단계 (높을수록 화남)
+// o.spin: 문어 다리 회전 / o.parts: 와플 거북선 포대 [{dx, dy, r, dead, hitT}]
 export function drawBoss(ctx, kind, o = {}) {
   FLASH = Boolean(o.flash);
   ctx.save();
-  (BOSS_DRAW[kind] || BOSS_DRAW.pudding)(ctx, o.t || 0, o.phase || 1);
+  (BOSS_DRAW[kind] || BOSS_DRAW.pudding)(ctx, o.t || 0, o.phase || 1, o);
   ctx.restore();
   FLASH = false;
+}
+
+// 화가 나면 머리 위에서 김이 폴폴 (보스 공통)
+function steam(ctx, t, y, spread = 22) {
+  if (FLASH) return;
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 1.2 + i / 3) % 1;
+    ctx.globalAlpha = 0.8 * (1 - k);
+    circle(ctx, (i - 1) * spread + Math.sin(t * 3 + i) * 3, y - k * 22, 4 + k * 5, '#ffffff');
+  }
+  ctx.globalAlpha = 1;
+}
+
+function bolt(ctx, x, y, s, color) { // 작은 번개 모양
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + 1 * s, y - 6 * s);
+  ctx.lineTo(x - 3 * s, y + 1 * s);
+  ctx.lineTo(x, y + 1 * s);
+  ctx.lineTo(x - 1.5 * s, y + 7 * s);
+  ctx.lineTo(x + 3.5 * s, y - 1 * s);
+  ctx.lineTo(x + 0.5 * s, y - 1 * s);
+  ctx.closePath();
+  ctx.fill();
 }
 
 const BOSS_DRAW = {
@@ -467,16 +498,204 @@ const BOSS_DRAW = {
     ctx.restore();
     ctx.restore();
     // 2단계: 머리에서 김이 폴폴 (화났어요)
-    if (phase === 2 && !FLASH) {
-      for (let i = 0; i < 3; i++) {
-        const k = (t * 1.2 + i / 3) % 1;
-        ctx.globalAlpha = 0.8 * (1 - k);
-        circle(ctx, (i - 1) * 22 + Math.sin(t * 3 + i) * 3, -40 - k * 22, 4 + k * 5, '#ffffff');
+    if (phase === 2) steam(ctx, t, -40);
+  },
+
+  // 문어 사탕왕: 사탕 머리 + 줄무늬 사탕 다리 8개(회전) + 작은 왕관
+  octopus(ctx, t, phase, o) {
+    const spin = o.spin || 0;
+    for (let i = 0; i < 8; i++) {
+      const a = spin + (i * Math.PI) / 4;
+      ctx.save();
+      ctx.rotate(a);
+      // 꼬불꼬불 다리 (분홍 + 흰 줄무늬)
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = col(i % 2 ? '#ff7fb6' : '#b27dff');
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      const wig = Math.sin(t * 6 + i) * 5;
+      ctx.quadraticCurveTo(30, wig, 42, wig * 0.4);
+      ctx.stroke();
+      if (!FLASH) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
-      ctx.globalAlpha = 1;
+      circle(ctx, 43, wig * 0.4, 5, col('#ffe066')); // 다리 끝 사탕 (여기서 탄이 나감)
+      ctx.restore();
+    }
+    // 머리
+    circle(ctx, 0, -4, 31, col('#c45ea8'));
+    circle(ctx, 0, -6, 29, col('#e57ec4'));
+    // 소용돌이 사탕 무늬
+    if (!FLASH) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let k = 0; k < 40; k++) {
+        const a = k * 0.35 + t;
+        const r = 3 + k * 0.5;
+        const x = Math.cos(a) * r;
+        const y = -18 + Math.sin(a) * r * 0.5;
+        if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // 왕관
+    ctx.fillStyle = col('#ffd84d');
+    ctx.beginPath();
+    ctx.moveTo(-13, -30); ctx.lineTo(-13, -42); ctx.lineTo(-6, -35); ctx.lineTo(0, -45);
+    ctx.lineTo(6, -35); ctx.lineTo(13, -42); ctx.lineTo(13, -30);
+    ctx.closePath();
+    ctx.fill();
+    circle(ctx, 0, -38, 2.4, col('#ff6fa8'));
+    ctx.save();
+    ctx.translate(0, 2);
+    grumpyFace(ctx, 2.3, phase === 2 ? 1.8 : 1);
+    ctx.restore();
+    if (phase === 2) steam(ctx, t, -48);
+  },
+
+  // 와플 거북선: 와플 등껍질 + 포대 4개 + 아래쪽 머리
+  waffleShip(ctx, t, phase, o) {
+    // 지느러미
+    for (const s of [-1, 1]) {
+      ellipse(ctx, s * 50, 18 + Math.sin(t * 4 + s) * 3, 14, 7, col('#8fcf6a'), s * 0.5);
+    }
+    // 머리 (플레이어 쪽)
+    circle(ctx, 0, 40, 15, col('#9fdc78'));
+    ctx.save();
+    ctx.translate(0, 40);
+    grumpyFace(ctx, 1.3, phase === 2 ? 1.8 : 1);
+    ctx.restore();
+    // 등껍질 = 와플
+    ellipse(ctx, 0, 0, 52, 40, col('#c98b3a'));
+    ellipse(ctx, 0, -2, 48, 36, col('#e6ad55'));
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(0, -2, 48, 36, 0, 0, TAU);
+    ctx.clip();
+    ctx.strokeStyle = col('#c4862f');
+    ctx.lineWidth = 3;
+    for (let x = -48; x <= 48; x += 12) { ctx.beginPath(); ctx.moveTo(x, -40); ctx.lineTo(x, 36); ctx.stroke(); }
+    for (let y = -38; y <= 36; y += 12) { ctx.beginPath(); ctx.moveTo(-50, y); ctx.lineTo(50, y); ctx.stroke(); }
+    ctx.restore();
+    ellipse(ctx, -18, -20, 12, 5, 'rgba(255,255,255,0.25)', -0.3);
+    // 포대 (부서지면 부스러기)
+    for (const q of o.parts || []) {
+      ctx.save();
+      ctx.translate(q.dx, q.dy);
+      if (q.dead) {
+        for (const [x, y, r] of [[-4, 2, 3], [3, -2, 2.5], [2, 4, 2]]) circle(ctx, x, y, r, col('#8a5a2a'));
+      } else {
+        const keep = FLASH;
+        if (q.hitT > 0) FLASH = true;
+        circle(ctx, 0, 0, q.r, col('#fff1d6'));
+        circle(ctx, 0, 0, q.r - 3, col('#f7c6d9'));
+        ctx.fillStyle = col('#6b4a3a');
+        rrect(ctx, -3, 2, 6, 11, 2);
+        ctx.fill();
+        circle(ctx, 0, 0, 3, col('#6b4a3a'));
+        FLASH = keep;
+      }
+      ctx.restore();
+    }
+    if (phase === 2) steam(ctx, t, -42, 26);
+  },
+
+  // 번개 솜사탕: 몽실한 솜사탕 구름 + 막대 + 주위에 작은 번개
+  cottonStorm(ctx, t, phase) {
+    const angry = phase === 2;
+    const puffs = [[0, -8, 26], [-24, 0, 18], [24, 0, 18], [-14, -24, 16], [14, -24, 16], [-10, 12, 16], [10, 12, 16]];
+    const c1 = angry ? '#b9a3d9' : '#ffc4e1';
+    const c2 = angry ? '#8f7fb8' : '#a8dcff';
+    line(ctx, 0, 20, 0, 48, 5, col('#f4e6c8')); // 막대
+    for (const [x, y, r] of puffs) circle(ctx, x, y + Math.sin(t * 3 + x) * 1.5, r + 2, col(c2));
+    for (const [x, y, r] of puffs) circle(ctx, x * 0.95, y - 1 + Math.sin(t * 3 + x) * 1.5, r, col(c1));
+    ellipse(ctx, -12, -26, 9, 4, 'rgba(255,255,255,0.5)', -0.3);
+    grumpyFace(ctx, 2.4, angry ? 1.8 : 1);
+    // 빙글 도는 작은 번개
+    if (!FLASH) {
+      for (let i = 0; i < 4; i++) {
+        const a = t * 1.5 + (i * Math.PI) / 2;
+        bolt(ctx, Math.cos(a) * 48, Math.sin(a) * 34 - 4, 1.3, (Math.floor(t * 6) + i) % 2 ? '#fff27a' : '#ffd84d');
+      }
     }
   },
+
+  // 케이크 대마왕: 3단 케이크. 단계가 오를수록 위에서부터 한 단씩 없어짐
+  cakeKing(ctx, t, phase) {
+    const tiers = [ // 아래 → 위 [y, w, h, 몸 색, 크림 색]
+      [26, 104, 30, '#8a5a3c', '#fff3e3'],
+      [-2, 80, 28, '#ff9cc5', '#ffffff'],
+      [-28, 56, 26, '#fff3e3', '#ff9cc5'],
+    ];
+    const left = Math.max(1, 4 - phase);
+    const wob = Math.sin(t * (2 + phase * 2)) * 0.03;
+    ctx.save();
+    ctx.scale(1 + wob, 1 - wob);
+    ellipse(ctx, 0, 42, 62, 8, col('#c9d3e6')); // 접시
+    for (let i = 0; i < left; i++) {
+      const [y, w, h, body, cream] = tiers[i];
+      ctx.fillStyle = col(body);
+      rrect(ctx, -w / 2, y - h / 2, w, h, 6);
+      ctx.fill();
+      // 크림 물결
+      ctx.fillStyle = col(cream);
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, y - h / 2 + 2);
+      for (let x = -w / 2; x <= w / 2; x += 8) ctx.arc(x + 4, y - h / 2 + 2, 4, Math.PI, 0, true);
+      ctx.lineTo(w / 2, y - h / 2 - 2);
+      ctx.lineTo(-w / 2, y - h / 2 - 2);
+      ctx.closePath();
+      ctx.fill();
+      // 딸기 장식
+      if (!FLASH) for (let x = -w / 2 + 10; x < w / 2 - 4; x += 18) circle(ctx, x, y + 4, 3, '#ff5b6e');
+    }
+    // 맨 위 단에 얼굴 + 촛불 왕관
+    const [ty, tw, th] = tiers[left - 1];
+    for (let i = -1; i <= 1; i++) {
+      ctx.fillStyle = col('#7fd6ff');
+      rrect(ctx, i * 12 - 2.5, ty - th / 2 - 16, 5, 13, 2);
+      ctx.fill();
+      ellipse(ctx, i * 12, ty - th / 2 - 19 + Math.sin(t * 10 + i) * 0.8, 2.5, 4, col('#ffb347'));
+    }
+    ctx.save();
+    ctx.translate(0, ty + 1);
+    grumpyFace(ctx, Math.min(2.2, tw / 30), 1 + (phase - 1) * 0.6);
+    ctx.restore();
+    ctx.restore();
+    if (phase >= 2) steam(ctx, t, ty - th / 2 - 26, 20);
+  },
 };
+
+// 엔딩용 과자성 (케이크 탑 + 깃발)
+export function drawCastle(ctx, t = 0) {
+  const towers = [[-70, 70, '#ff9cc5'], [70, 70, '#ff9cc5'], [-35, 100, '#fff3e3'], [35, 100, '#fff3e3'], [0, 130, '#ffd27a']];
+  for (const [x, h, c] of towers) {
+    ctx.fillStyle = c;
+    rrect(ctx, x - 20, -h, 40, h, 8);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    for (let k = -20; k < 20; k += 8) { ctx.beginPath(); ctx.arc(x + k + 4, -h + 2, 4, Math.PI, 0, true); ctx.fill(); }
+    circle(ctx, x, -h - 6, 5, '#ff5b6e'); // 딸기 지붕
+    line(ctx, x, -h - 10, x, -h - 28, 2, '#8a5a3c');
+    ctx.fillStyle = PLAYER_CHARS[Math.abs(Math.round(x / 35)) % 4].body;
+    ctx.beginPath();
+    const wave = Math.sin(t * 5 + x) * 3;
+    ctx.moveTo(x, -h - 28); ctx.lineTo(x + 16, -h - 23 + wave); ctx.lineTo(x, -h - 18);
+    ctx.closePath();
+    ctx.fill();
+    // 창문
+    circle(ctx, x, -h / 2, 6, '#ffe9a8');
+  }
+  ctx.fillStyle = '#8a5a3c';
+  rrect(ctx, -14, -34, 28, 34, 12); // 성문
+  ctx.fill();
+}
 
 // ------------------------------------------------------------ 총알·코인·효과
 // 별 총알: 단계가 오를수록 색이 화려해짐 (개수는 rules.js의 발사 모양대로)

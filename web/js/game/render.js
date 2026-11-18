@@ -1,12 +1,14 @@
 // 그리기 전용. 게임 상태(world)를 읽기만 하고 바꾸지 않는다.
 // 그림 파일 없이 Canvas 도형으로 직접 그린다.
 // 캐릭터·적 그림은 sprites.js (SPEC-v2 6단계)
-import { VIEW, DISPLAY, PLAYER, ENEMY_SHOT, POWERUP, COIN } from './rules.js';
+import { VIEW, DISPLAY, PLAYER, ENEMY_SHOT, POWERUP, COIN, STAGES } from './rules.js';
 import { bombButtonCenter } from './input.js';
 import {
-  drawPlayer, drawPlayerIcon, drawHitDot, drawEnemy, drawBoss as drawBossSprite, drawStarShot, drawPop, drawCoin,
+  drawPlayer, drawPlayerIcon, drawHitDot, drawEnemy, drawBoss as drawBossSprite, drawStarShot, drawPop, drawCoin, drawCastle,
   playerChar, ENEMY_SPRITE, BOSS_CHARS, RAINBOW,
 } from './sprites.js';
+import { stageInfo } from './stages.js';
+import { bossHpRatio, laserActive } from './boss.js';
 
 const POWERUP_COLOR = { P: '#ff9b3d', B: '#4da3ff', '1UP': '#5fd068' };
 const FONT = 'system-ui, -apple-system, "Noto Sans KR", sans-serif';
@@ -92,12 +94,13 @@ export function createRenderer(canvas) {
     }
     ctx.save();
     ctx.translate(sx, sy);
-    drawBackground(now, frozen);
+    drawBackground(now, frozen, world ? stageInfo(world.round || 1).theme : 'menu');
     if (world) {
       drawPowerups(world);
       if (world.coins) drawCoins(world, now);
       drawEnemies(world, now);
       if (world.boss && !world.boss.dead) drawBoss(world.boss, now);
+      if (world.lasers && world.lasers.length) drawLasers(world, now);
       drawShots(world, now, opts.slot || 1);
       drawPlayers(world, now);
       drawEnemyShots(world);
@@ -110,6 +113,7 @@ export function createRenderer(canvas) {
       drawHud(world, slot, opts.fps);
       drawBombButton(world.players.find((q) => q.slot === slot));
       if (world.boss && !world.boss.dead && !world.boss.entering) drawBossBar(world.boss);
+      if (world.round && world.stage && world.stage.t < STAGES.TITLE_SECONDS && world.state === 'play') drawStageTitle(world);
     }
     if (warnT > 0) { warnT -= dt; drawWarning(now); }
     if (flashT > 0) {
@@ -119,7 +123,7 @@ export function createRenderer(canvas) {
     }
   }
 
-  // ------------------------------------------------------------ 배경 (별 3겹)
+  // ------------------------------------------------------------ 배경 (스테이지마다 다른 하늘, 메뉴는 밤하늘)
   function makeStars() {
     const list = [];
     for (let i = 0; i < 70; i++) {
@@ -128,19 +132,173 @@ export function createRenderer(canvas) {
     }
     return list;
   }
+  // 구름·물결·눈송이 등 장식 (위치는 한 번 정하고 시간에 따라 내려감)
+  const deco = Array.from({ length: 40 }, (_, i) => ({ x: Math.random() * VIEW.W, y: Math.random() * VIEW.H, s: 0.6 + Math.random() * 0.8, i }));
+  const THEMES = {
+    menu: { stops: ['#070b1f', '#16224d'], stars: true },
+    sky: { stops: ['#3f86dc', '#9fd2ff'], clouds: 'rgba(255,255,255,0.55)' },
+    sunset: { stops: ['#3a2766', '#e9776a', '#ffc48a'], clouds: 'rgba(255,190,205,0.45)' },
+    sea: { stops: ['#5bbcf2', '#1f86c4', '#0d5a92'], waves: true },
+    snow: { stops: ['#62759e', '#cfdcee'], snow: true, trees: true },
+    night: { stops: ['#0a0d2b', '#2b1d5e'], stars: true, candy: true },
+  };
+  const gradCache = new Map();
+  function gradientOf(name, stops) {
+    let g = gradCache.get(name);
+    if (!g) {
+      g = ctx.createLinearGradient(0, 0, 0, VIEW.H);
+      stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+      gradCache.set(name, g);
+    }
+    return g;
+  }
   let starT = 0;
-  function drawBackground(now, frozen) {
+  function drawBackground(now, frozen, theme = 'menu') {
     if (!frozen) starT = now / 1000;
-    const g = ctx.createLinearGradient(0, 0, 0, VIEW.H);
-    g.addColorStop(0, '#070b1f');
-    g.addColorStop(1, '#16224d');
-    ctx.fillStyle = g;
+    const th = THEMES[theme] || THEMES.menu;
+    ctx.fillStyle = gradientOf(theme, th.stops);
     ctx.fillRect(-10, -10, VIEW.W + 20, VIEW.H + 20);
-    for (const s of stars) {
-      const speed = 20 + s.layer * 35;
-      const y = (s.y + starT * speed) % VIEW.H;
-      ctx.fillStyle = s.layer === 2 ? '#ffffff' : s.layer === 1 ? '#b8c4ff' : '#6672a8';
-      ctx.fillRect(s.x, y, s.size, s.size * (1 + s.layer));
+    if (th.stars) {
+      for (const s of stars) {
+        const speed = 20 + s.layer * 35;
+        const y = (s.y + starT * speed) % VIEW.H;
+        ctx.fillStyle = s.layer === 2 ? '#ffffff' : s.layer === 1 ? '#b8c4ff' : '#6672a8';
+        ctx.fillRect(s.x, y, s.size, s.size * (1 + s.layer));
+      }
+    }
+    if (th.clouds) { // 몽실한 구름 (천천히 내려감)
+      ctx.fillStyle = th.clouds;
+      for (let i = 0; i < 9; i++) {
+        const d = deco[i];
+        const y = ((d.y + starT * (25 + d.s * 20)) % (VIEW.H + 80)) - 40;
+        const w = 30 * d.s;
+        ctx.beginPath();
+        ctx.ellipse(d.x, y, w, w * 0.45, 0, 0, Math.PI * 2);
+        ctx.ellipse(d.x - w * 0.6, y + 4, w * 0.6, w * 0.32, 0, 0, Math.PI * 2);
+        ctx.ellipse(d.x + w * 0.6, y + 4, w * 0.6, w * 0.32, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (th.waves) { // 물결 줄 (위쪽 1/4은 하늘)
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 18; i++) {
+        const d = deco[i];
+        const y = (d.y + starT * 45) % VIEW.H;
+        if (y < VIEW.H * 0.25) continue;
+        ctx.beginPath();
+        ctx.arc(d.x, y, 10 * d.s, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      }
+    }
+    if (th.trees) { // 양옆 눈 덮인 나무
+      for (let i = 0; i < 8; i++) {
+        const d = deco[20 + i];
+        const x = i % 2 ? VIEW.W - 12 - d.s * 10 : 12 + d.s * 10;
+        const y = ((d.y + starT * 40) % (VIEW.H + 80)) - 40;
+        ctx.fillStyle = 'rgba(46,82,96,0.55)';
+        ctx.beginPath(); ctx.moveTo(x, y - 26 * d.s); ctx.lineTo(x + 14 * d.s, y + 10 * d.s); ctx.lineTo(x - 14 * d.s, y + 10 * d.s); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.beginPath(); ctx.moveTo(x, y - 26 * d.s); ctx.lineTo(x + 6 * d.s, y - 14 * d.s); ctx.lineTo(x - 6 * d.s, y - 14 * d.s); ctx.closePath(); ctx.fill();
+      }
+    }
+    if (th.snow) { // 눈송이
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (const d of deco) {
+        const y = (d.y + starT * (35 + d.s * 30)) % VIEW.H;
+        const x = (d.x + Math.sin(starT + d.i) * 12 + VIEW.W) % VIEW.W;
+        ctx.beginPath(); ctx.arc(x, y, 1.2 + d.s, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (th.candy) { // 밤하늘에 떠다니는 별사탕
+      const colors = ['#ff9fd0', '#ffe066', '#9ad8ff'];
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 10; i++) {
+        const d = deco[i];
+        const y = (d.y + starT * 30) % VIEW.H;
+        ctx.fillStyle = colors[i % 3];
+        ctx.beginPath(); ctx.arc(d.x, y, 2.5 * d.s, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 스테이지 시작 제목 "STAGE 2 · 노을 구름" (2초, 들어오고 사라지기)
+  function drawStageTitle(world) {
+    const info = stageInfo(world.round);
+    const t = world.stage.t;
+    const a = Math.min(1, t / 0.3, (STAGES.TITLE_SECONDS - t) / 0.4);
+    const y0 = VIEW.H * 0.36;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.fillStyle = 'rgba(10,12,40,0.45)';
+    ctx.fillRect(0, y0, VIEW.W, 86);
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(20,20,50,0.8)';
+    ctx.font = `900 34px ${FONT}`;
+    ctx.strokeText(`STAGE ${info.no}`, VIEW.W / 2, y0 + 42);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`STAGE ${info.no}`, VIEW.W / 2, y0 + 42);
+    ctx.font = `bold 17px ${FONT}`;
+    ctx.fillStyle = '#ffe066';
+    ctx.strokeText(info.name, VIEW.W / 2, y0 + 70);
+    ctx.fillText(info.name, VIEW.W / 2, y0 + 70);
+    ctx.restore();
+  }
+
+  // 번개 레이저: 경고선(깜박이는 점선) → 번쩍이는 번개 기둥
+  function drawLasers(world, now) {
+    for (const l of world.lasers) {
+      if (!laserActive(l)) {
+        // 경고: 번개가 칠 자리에 빨간 기둥 + 굵은 점선 (밝은 배경에서도 잘 보이게, 깜박임)
+        const on = Math.floor(now / 120) % 2 === 0;
+        ctx.fillStyle = on ? 'rgba(255,40,90,0.22)' : 'rgba(255,40,90,0.1)';
+        ctx.fillRect(l.x - l.w, l.y0, l.w * 2, VIEW.H - l.y0);
+        ctx.strokeStyle = on ? '#ff2f6d' : 'rgba(255,47,109,0.5)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 7]);
+        ctx.beginPath(); ctx.moveTo(l.x, l.y0); ctx.lineTo(l.x, VIEW.H); ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      ctx.fillStyle = 'rgba(255,240,120,0.35)';
+      ctx.fillRect(l.x - l.w, l.y0, l.w * 2, VIEW.H - l.y0);
+      ctx.strokeStyle = '#fffbe0';
+      ctx.lineWidth = l.w * 0.55;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y0);
+      for (let y = l.y0; y < VIEW.H; y += 26) ctx.lineTo(l.x + (Math.random() - 0.5) * l.w * 0.8, y + 26);
+      ctx.stroke();
+    }
+  }
+
+  // 엔딩 장면: 밤하늘 + 과자성 + 그 주위를 도는 뭉게 비행단 + 축하 "뿅"
+  function drawEnding(now, slots = [1, 2, 3, 4]) {
+    const t = now / 1000;
+    const k = canvas.width / VIEW.W;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    drawBackground(now, false, 'night');
+    ctx.save();
+    ctx.translate(VIEW.W / 2, VIEW.H * 0.42); // 아래쪽 카드에 가리지 않게 위로
+    drawCastle(ctx, t);
+    ctx.restore();
+    slots.forEach((slot, i) => {
+      const a = t * 0.9 + (i * Math.PI * 2) / slots.length;
+      ctx.save();
+      ctx.translate(VIEW.W / 2 + Math.cos(a) * 120, VIEW.H * 0.26 + Math.sin(a) * 45);
+      drawPlayer(ctx, slot, { t: t + i, tilt: -Math.sin(a) });
+      ctx.restore();
+    });
+    for (let i = 0; i < 4; i++) { // 축하 불꽃
+      const k2 = (t * 0.8 + i / 4) % 1;
+      ctx.save();
+      ctx.translate(60 + ((i * 97) % 240), 60 + ((i * 53) % 90));
+      drawPop(ctx, k2, true);
+      ctx.restore();
     }
   }
 
@@ -197,9 +355,12 @@ export function createRenderer(canvas) {
     const list = world.eshots.list;
     if (!list.length) return;
     ctx.fillStyle = '#ff4fa3';
+    ctx.strokeStyle = 'rgba(90,0,50,0.7)'; // 밝은 하늘에서도 잘 보이게 테두리
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     for (const b of list) { ctx.moveTo(b.x + ENEMY_SHOT.R + 1, b.y); ctx.arc(b.x, b.y, ENEMY_SHOT.R + 1, 0, Math.PI * 2); }
     ctx.fill();
+    ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     for (const b of list) { ctx.moveTo(b.x + 2, b.y); ctx.arc(b.x, b.y, 2, 0, Math.PI * 2); }
@@ -229,7 +390,7 @@ export function createRenderer(canvas) {
   function drawBoss(b, now) {
     ctx.save();
     ctx.translate(b.x, b.y);
-    drawBossSprite(ctx, 'pudding', { t: now / 1000, flash: b.hitT > 0, phase: b.phase });
+    drawBossSprite(ctx, b.kind || 'pudding', { t: now / 1000, flash: b.hitT > 0, phase: b.phase, spin: b.spin, parts: b.parts });
     ctx.restore();
   }
 
@@ -239,14 +400,15 @@ export function createRenderer(canvas) {
     const w = VIEW.W - 80;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(x, y, w, 8);
-    ctx.fillStyle = b.phase === 2 ? '#ff5b5b' : '#ffd23f';
-    ctx.fillRect(x, y, w * Math.max(0, b.hp / b.maxHp), 8);
+    ctx.fillStyle = b.phase >= 2 ? '#ff5b5b' : '#ffd23f';
+    const ratio = b.parts ? bossHpRatio(b) : b.hp / b.maxHp; // 와플 거북선은 포대까지 합쳐서
+    ctx.fillRect(x, y, w * Math.max(0, ratio), 8);
     ctx.fillStyle = '#ffffff';
     ctx.font = `bold 10px ${FONT}`;
     ctx.textAlign = 'right';
     ctx.fillText('BOSS', x - 4, y + 8);
     ctx.textAlign = 'left';
-    ctx.fillText(BOSS_CHARS.pudding.name, x, y + 20);
+    ctx.fillText((BOSS_CHARS[b.kind] || BOSS_CHARS.pudding).name, x, y + 20);
   }
 
   // ------------------------------------------------------------ 코인 (곧 사라질 코인은 깜박임)
@@ -447,5 +609,5 @@ export function createRenderer(canvas) {
     ctx.closePath();
   }
 
-  return { resize, draw, addEvents, view };
+  return { resize, draw, drawEnding, addEvents, view };
 }

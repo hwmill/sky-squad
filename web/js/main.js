@@ -2,13 +2,15 @@
 // - 혼자 하기(solo): 이 폰에서 계산·그리기
 // - 같이 하기 방장(host): 이 폰이 게임 전체를 계산하고 초당 15회 상태를 보냄
 // - 같이 하기 게스트(guest): 상태를 받아 보간해서 그리고, 내 비행기 위치를 초당 10회 보냄
-import { createWorld, startLoop, continueGame, giveUp, nextRound } from './game/engine.js';
+import { createWorld, startLoop, continueGame, giveUp, nextRound, goToStage } from './game/engine.js';
+import { isLastStage } from './game/stages.js';
+import { updateRecords } from './game/records.js';
 import { openShopScreen, showStageClear } from './ui/shop-screen.js';
 import { createRenderer } from './game/render.js';
 import { createInput } from './game/input.js';
 import { createSound } from './game/sound.js';
 import { movePlayer } from './game/player.js';
-import { VIEW, PLAYER, SHOT, STAGE1, NETPLAY } from './game/rules.js';
+import { VIEW, PLAYER, SHOT, NETPLAY, STAGES, RECORD } from './game/rules.js';
 import { encodeSnapshot, decodeSnapshot, createGuestView } from './net/sync.js';
 import { connectRoom } from './net/room.js';
 import { backoffDelay } from './net/backoff.js';
@@ -20,7 +22,6 @@ import { renderRoom, bindRoom, showInvite } from './ui/room.js';
 import { isKakaoInApp, showKakaoGuide } from './ui/install-guide.js';
 import { startPreview } from './ui/preview.js';
 
-const BEST_KEY = 'sky:best';
 const params = new URLSearchParams(location.search);
 // 개발 모드 (?debug=1): FPS 표시. &boss=1 이면 보스 직전부터 시작, 콘솔에서 window.__world로 상태 확인
 const DEBUG = params.get('debug') === '1';
@@ -28,12 +29,30 @@ const DEBUG_BOSS = DEBUG && params.get('boss') === '1';
 const DEBUG_BOSS_LEAD = 3; // 보스 등장 몇 초 전부터
 // 개발 모드 &coins=500: 혼자 하기를 코인 500개로 시작 (상점 확인용)
 const DEBUG_COINS = DEBUG ? Number(params.get('coins')) || 0 : 0;
+// 개발 모드 &stage=4: 혼자 하기를 4번째 스테이지부터 (&boss=1과 같이 쓰면 그 스테이지 보스 직전)
+const DEBUG_STAGE = DEBUG ? Math.min(STAGES.COUNT, Math.max(1, Math.floor(Number(params.get('stage')) || 1))) : 1;
 // 개발 모드 &power=8: 총알 단계를 정해서 시작 (보스 처치 시간 확인용)
 const DEBUG_POWER = DEBUG ? Math.min(PLAYER.MAX_POWER, Math.max(0, Math.floor(Number(params.get('power')) || 0))) : 0;
 const NO_INPUT = { dx: 0, dy: 0, bomb: false };
 
-function loadBest() { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } }
-function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch { /* 저장 불가 */ } }
+// 최고 기록: 최고 점수(1차 키 'sky:best' 그대로) + 최고 도달 스테이지(새 키)
+function loadRecords() {
+  try {
+    return {
+      score: Number(localStorage.getItem(RECORD.BEST_SCORE_KEY)) || 0,
+      stage: Number(localStorage.getItem(RECORD.BEST_STAGE_KEY)) || 0,
+    };
+  } catch { return { score: 0, stage: 0 }; }
+}
+// 이번 판 기록을 반영하고 { score, stage, newScore, newStage } 돌려줌 (갱신될 때만 저장)
+function record(score, stage) {
+  const r = updateRecords(loadRecords(), { score, stage });
+  try {
+    if (r.newScore) localStorage.setItem(RECORD.BEST_SCORE_KEY, String(r.score));
+    if (r.newStage) localStorage.setItem(RECORD.BEST_STAGE_KEY, String(r.stage));
+  } catch { /* 저장 불가 */ }
+  return r;
+}
 const $ = (id) => document.getElementById(id);
 
 const canvas = $('game');
@@ -52,6 +71,7 @@ const guestInputs = new Map(); // 방장: 자리별 마지막 입력
 let netEvents = [];            // 방장: 다음 스냅샷에 실을 효과 사건
 let lastSnapAt = 0;
 let stageClearTimer = 0;       // 혼자 하기: 클리어 결과 → 상점으로 넘어가는 타이머
+let endingRaf = 0;             // 엔딩 장면 그리기
 
 // FPS 측정 (개발 모드)
 let fps = 0;
@@ -75,6 +95,8 @@ const myPlayer = (players) => players.find((p) => p.slot === mySlot);
 // 진행 중인 게임을 모두 멈춤 (화면 전환 전)
 function stopGames() {
   clearTimeout(stageClearTimer);
+  cancelAnimationFrame(endingRaf);
+  endingRaf = 0;
   if (loop) { loop.pause(); loop = null; }
   if (guest) { cancelAnimationFrame(guest.raf); guest = null; }
   screens.hideContinue();
@@ -134,8 +156,9 @@ function startLocalGame(slots, seed) {
   world = createWorld({ slots, seed, economy: mode === 'solo' }); // 코인·상점은 혼자 하기만 (같이 하기는 9단계)
   if (DEBUG_COINS && mode === 'solo') world.players[0].coins = DEBUG_COINS;
   if (DEBUG_POWER) for (const p of world.players) p.power = DEBUG_POWER;
+  if (DEBUG_STAGE > 1 && mode === 'solo') goToStage(world, DEBUG_STAGE);
   if (DEBUG_BOSS) {
-    world.stage.t = STAGE1.BOSS_AT - DEBUG_BOSS_LEAD;
+    world.stage.t = world.bossAt - DEBUG_BOSS_LEAD;
     world.stage.next = world.timeline.length;
   }
   if (DEBUG) window.__world = world;
@@ -165,19 +188,18 @@ function finish(w) {
   showMyResult(w.state === 'clear', myPlayer(w.players)?.score || 0);
 }
 
-// 혼자 하기 클리어: 결과 3초 → 상점 → 다음 스테이지 (7단계: 스테이지 1을 난이도 +1로 다시)
+// 혼자 하기 클리어: 결과 3초 → 상점 → 다음 스테이지. 스테이지 5를 깨면 엔딩
 function stageClear(w) {
   const p = myPlayer(w.players);
-  const best = loadBest();
-  const newBest = p.score > best;
-  if (newBest) saveBest(p.score);
+  const rec = record(p.score, w.round);
+  if (isLastStage(w.round)) { showEnding(w, p, rec); return; }
   stageClearTimer = showStageClear({
     round: w.round,
     score: p.score,
     stageCoins: p.stageCoins,
     nomiss: !p.missed,
-    best: Math.max(best, p.score),
-    newBest,
+    best: rec.score,
+    newBest: rec.newScore,
   }, () => {
     if (world !== w || !loop) return;
     openShopScreen(p, {
@@ -188,20 +210,32 @@ function stageClear(w) {
       onDone: () => {
         if (world !== w || !loop) return;
         nextRound(w);
+        record(p.score, w.round); // 새 스테이지에 도착 = 최고 도달 스테이지 후보
         input.reset();
         screens.hideAll();
-        loop.resume();
-        screens.toast(`${w.round}번째 스테이지! 적이 조금 더 단단해졌어요`);
+        loop.resume(); // 화면에 "STAGE 2 · 노을 구름" 제목이 2초 나옴
       },
     });
   });
 }
 
+// 엔딩: 과자성 장면 + 최종 점수 + 처음부터
+function showEnding(w, p, rec) {
+  stopIdle();
+  screens.showEnding({ score: p.score, best: rec.score, newBest: rec.newScore, bestStage: rec.stage });
+  const frame = (now) => {
+    renderer.drawEnding(now, [mySlot]);
+    endingRaf = requestAnimationFrame(frame);
+  };
+  endingRaf = requestAnimationFrame(frame);
+}
+
 function showMyResult(cleared, score) {
-  const best = loadBest();
-  const newBest = score > best;
-  if (newBest) saveBest(score);
-  screens.showResult({ cleared, score, best: Math.max(best, score), newBest, multi: mode !== 'solo' });
+  const rec = record(score, world && mode !== 'guest' ? world.round : 1);
+  screens.showResult({
+    cleared, score, best: rec.score, newBest: rec.newScore,
+    bestStage: rec.stage, newStage: rec.newStage, multi: mode !== 'solo',
+  });
   startIdle();
 }
 
@@ -520,7 +554,8 @@ function toTitle() {
   world = null;
   if (room) leaveRoom();
   mode = null;
-  screens.showTitle({ best: loadBest(), soundOn: sound.on, nickname: friends.account?.nickname });
+  const rec = loadRecords();
+  screens.showTitle({ best: rec.score, bestStage: rec.stage, soundOn: sound.on, nickname: friends.account?.nickname });
   startIdle();
 }
 
@@ -565,6 +600,7 @@ screens.bindButtons({
   },
   resume: resumeGame,
   again: () => { if (room) { stopGames(); mode = null; showRoom(); } else startSolo(); },
+  endAgain: startSolo, // 엔딩 → 처음부터
   toTitle: () => (room ? exitRoom() : toTitle()),
 });
 bindRoom({ onStart: hostStart, onLeave: exitRoom, onInvite: inviteFriend });

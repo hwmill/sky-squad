@@ -44,11 +44,16 @@ export function spawnEnemy(world, spec) {
     phaseT: 0,
     drop: spec.drop || null,
     hitT: 0,
+    vx: 0,          // 사탕벌 돌진 방향
+    vy: 0,
+    spin: 0,        // 도넛 포대 원형 탄 회전
     dead: false,
   });
 }
 
-function move(e, def, dt) {
+export const isMedium = (type) => Boolean(ENEMY[type] && ENEMY[type].medium);
+
+function move(world, e, def, dt) {
   switch (e.pattern) {
     case 'sine':
       e.y += def.speed * dt;
@@ -67,6 +72,20 @@ function move(e, def, dt) {
         if (e.phaseT >= def.hoverTime) e.phase = 2;
       } else {
         e.y += def.leaveSpeed * dt;
+      }
+      break;
+    case 'rush': // 사탕벌: 내려오다가 aimAfter초 뒤 그때 플레이어 쪽으로 곧장 돌진
+      if (e.phase === 0) {
+        e.y += def.speed * dt;
+        if (e.t >= def.aimAfter) {
+          const a = aimAt(world, e.x, e.y);
+          e.vx = Math.cos(a) * def.rushSpeed;
+          e.vy = Math.max(60, Math.sin(a) * def.rushSpeed); // 위로 되돌아가지는 않게
+          e.phase = 1;
+        }
+      } else {
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
       }
       break;
     default: // 'down'
@@ -94,6 +113,16 @@ function shoot(world, e, def, dt) {
         fireEnemyShot(world, e.x, e.y + e.r * 0.6, a, def.bulletSpeed);
       }
     }
+  } else if (e.type === 'm2') { // 도넛 포대: 머무는 동안 빙글 도는 원형 탄
+    if (e.phase !== 1) return;
+    e.fireT -= dt;
+    if (e.fireT <= 0) {
+      e.fireT += def.fireEvery;
+      for (let i = 0; i < def.ringCount; i++) {
+        fireEnemyShot(world, e.x, e.y, e.spin + (i * 2 * Math.PI) / def.ringCount, def.bulletSpeed);
+      }
+      e.spin += def.ringTurn * DEG;
+    }
   }
 }
 
@@ -104,7 +133,7 @@ export function updateEnemies(world, dt) {
     const def = ENEMY[e.type];
     e.t += dt;
     if (e.hitT > 0) e.hitT -= dt;
-    move(e, def, dt);
+    move(world, e, def, dt);
     shoot(world, e, def, dt);
     // 화면 밖으로 나가면 조용히 사라짐 (점수 없음)
     if (e.y > VIEW.H + m || e.x < -m || e.x > VIEW.W + m) e.dead = true;
@@ -123,9 +152,10 @@ function killEnemy(world, e, owner) {
   const def = ENEMY[e.type];
   const p = world.players.find((q) => q.slot === owner);
   if (p) p.score += def.score;
-  world.events.push({ type: 'explode', x: e.x, y: e.y, size: e.type === 'm1' ? 2 : 1 });
-  if (e.type === 'm1') dropPowerup(world, e.x, e.y, e.drop);
-  dropCoin(world, e.x, e.y, e.type === 'm1' ? COIN.MEDIUM : COIN.SMALL); // 혼자 하기(economy)일 때만
+  const medium = Boolean(def.medium);
+  world.events.push({ type: 'explode', x: e.x, y: e.y, size: medium ? 2 : 1 });
+  if (medium) dropPowerup(world, e.x, e.y, e.drop);
+  dropCoin(world, e.x, e.y, medium ? COIN.MEDIUM : COIN.SMALL); // 혼자 하기(economy)일 때만
 }
 
 export function removeDeadEnemies(world) {

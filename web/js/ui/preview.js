@@ -1,12 +1,14 @@
 // 캐릭터 미리보기 화면 (?preview=chars) — SPEC-v2 6단계 확인용
 // 모든 캐릭터를 이름과 함께 한 화면에 늘어놓고 움직임까지 보여 준다. 게임 계산은 하지 않는다.
-import { VIEW, PLAYER } from '../game/rules.js';
+import { VIEW, PLAYER, BOSSES } from '../game/rules.js';
 import {
   drawPlayer, drawHitDot, drawEnemy, drawBoss, drawStarShot, drawCoin, drawPop,
   PLAYER_CHARS, ENEMY_CHARS, BOSS_CHARS,
 } from '../game/sprites.js';
 
 const FONT = 'system-ui, -apple-system, "Noto Sans KR", sans-serif';
+// 와플 거북선 포대 위치 (rules.js BOSSES.waffleShip.TURRET.spots)
+const PREVIEW_PARTS = BOSSES.waffleShip.TURRET.spots.map(([dx, dy]) => ({ dx, dy, r: BOSSES.waffleShip.TURRET.r, hitT: 0 }));
 
 export function startPreview(canvas) {
   const ctx = canvas.getContext('2d');
@@ -70,10 +72,15 @@ export function startPreview(canvas) {
     });
 
     // ---- 보스
-    label('보스 (스테이지 1)', 14, 380, 11, '#b8c4ff', 'left');
-    const phase = t % 8 < 4 ? 1 : 2;
-    at(VIEW.W / 2, 444, () => drawBoss(ctx, 'pudding', { t, phase, flash: (t % 4) < 0.06 }));
-    label(`${BOSS_CHARS.pudding.name} · ${phase === 1 ? '1단계' : '2단계 (화남)'}`, VIEW.W / 2, 506, 12);
+    // 보스 5종을 4초씩 차례로 (2초는 보통, 2초는 화난 단계)
+    const kinds = Object.keys(BOSS_CHARS);
+    const kind = kinds[Math.floor(t / 4) % kinds.length];
+    const angry = t % 4 >= 2;
+    const phase = angry ? (kind === 'cakeKing' ? 3 : 2) : 1;
+    const parts = kind === 'waffleShip' ? PREVIEW_PARTS.map((q, i) => ({ ...q, dead: angry && i < 2 })) : null;
+    label(`보스 (스테이지 ${BOSS_CHARS[kind].stage} / 5)`, 14, 380, 11, '#b8c4ff', 'left');
+    at(VIEW.W / 2, 444, () => drawBoss(ctx, kind, { t, phase, spin: t * 0.6, parts, flash: (t % 2) < 0.06 }));
+    label(`${BOSS_CHARS[kind].name} · ${angry ? '화난 단계' : '처음 단계'}`, VIEW.W / 2, 512, 12);
 
     // ---- 총알·코인·효과
     label('별 총알 · 코인 · 뿅 효과', 14, 532, 11, '#b8c4ff', 'left');

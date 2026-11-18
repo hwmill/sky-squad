@@ -1,6 +1,6 @@
 // 화면 전환: 타이틀, 등록, 친구, 컨티뉴(10초), 일시정지, 결과. index.html의 .screen 요소를 보이고 숨긴다
 const $ = (id) => document.getElementById(id);
-const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result', 'notice', 'stageclear', 'shop'];
+const SCREENS = ['title', 'register', 'friends', 'room', 'continue', 'pause', 'result', 'notice', 'stageclear', 'shop', 'ending'];
 const TOAST_MS = 3000;
 
 export function showOnly(id) {
@@ -11,8 +11,14 @@ export function hideAll() {
   showOnly(null);
 }
 
-export function showTitle({ best, soundOn, nickname }) {
-  $('titleBest').textContent = best ? `최고 점수 ${best.toLocaleString('ko-KR')}` : '';
+// 최고 기록 한 줄: "최고 점수 12,345 · 최고 스테이지 3"
+const bestLine = (best, bestStage) => [
+  best ? `최고 점수 ${best.toLocaleString('ko-KR')}` : '',
+  bestStage ? `최고 스테이지 ${bestStage}` : '',
+].filter(Boolean).join(' · ');
+
+export function showTitle({ best, bestStage, soundOn, nickname }) {
+  $('titleBest').textContent = bestLine(best, bestStage);
   setNickname(nickname);
   setSoundLabel(soundOn);
   showOnly('title');
@@ -42,13 +48,21 @@ export function showPause(message = '화면을 누르면 계속해요') {
 }
 
 // multi: 같이 하기 결과 (버튼이 "대기실로 / 나가기"로 바뀜)
-export function showResult({ cleared, score, best, newBest, multi = false }) {
+export function showResult({ cleared, score, best, newBest, bestStage = 0, newStage = false, multi = false }) {
   $('resultTitle').textContent = cleared ? '스테이지 클리어!' : '게임 오버';
   $('resultScore').textContent = score.toLocaleString('ko-KR');
-  $('resultBest').textContent = newBest ? '🎉 최고 점수 갱신!' : `최고 점수 ${best.toLocaleString('ko-KR')}`;
+  const news = [newBest ? '최고 점수' : '', newStage ? '최고 스테이지' : ''].filter(Boolean);
+  $('resultBest').textContent = news.length ? `🎉 새 기록! (${news.join(' · ')})` : bestLine(best, bestStage);
   $('btnAgain').textContent = multi ? '대기실로' : '다시 하기';
   $('btnTitle').textContent = multi ? '나가기' : '처음으로';
   showOnly('result');
+}
+
+// 엔딩 (스테이지 5 클리어)
+export function showEnding({ score, best, newBest, bestStage }) {
+  $('endScore').textContent = score.toLocaleString('ko-KR');
+  $('endBest').textContent = newBest ? '🎉 새 기록! 최고 점수 갱신' : bestLine(best, bestStage);
+  showOnly('ending');
 }
 
 // 알림 화면 (방장이 나갔어요 등). 버튼을 누르면 onOk
@@ -86,4 +100,6 @@ export function bindButtons(h) {
   $('pause').onclick = h.resume;
   $('btnAgain').onclick = h.again;
   $('btnTitle').onclick = h.toTitle;
+  $('btnEndAgain').onclick = h.endAgain;
+  $('btnEndTitle').onclick = h.toTitle;
 }

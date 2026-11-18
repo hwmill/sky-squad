@@ -3,7 +3,8 @@
 import { SHOT, ENEMY, NETPLAY } from '../game/rules.js';
 
 const STATES = ['play', 'continue', 'over', 'clear'];
-const ETYPES = ['s1', 's2', 'm1'];
+const ETYPES = ['s1', 's2', 'm1', 's3', 'm2']; // 뒤에만 추가 (번호가 바뀌지 않게)
+const BKINDS = ['pudding', 'octopus', 'waffleShip', 'cottonStorm', 'cakeKing'];
 const UKINDS = ['P', 'B', '1UP'];
 const r = Math.round;
 const DEG = Math.PI / 180;
@@ -25,7 +26,7 @@ export function encodeSnapshot(world, events = []) {
       r(p.invuln * 10), p.bombT > 0 ? 1 : 0, Math.ceil(p.continueT), p.spectator ? 1 : 0, p.spawn,
     ]),
     e: world.enemies.filter((e) => !e.dead).map((e) => [e.id, ETYPES.indexOf(e.type), r(e.x), r(e.y), r((100 * e.hp) / e.maxHp), e.hitT > 0 ? 1 : 0]),
-    b: b && !b.dead ? [r(b.x), r(b.y), r((100 * b.hp) / b.maxHp), b.phase, b.entering ? 1 : 0, b.hitT > 0 ? 1 : 0] : 0,
+    b: b && !b.dead ? [r(b.x), r(b.y), r((100 * b.hp) / b.maxHp), b.phase, b.entering ? 1 : 0, b.hitT > 0 ? 1 : 0, Math.max(0, BKINDS.indexOf(b.kind))] : 0,
     u: world.powerups.map((u) => [UKINDS.indexOf(u.kind), r(u.x), r(u.y)]),
     m: shots,
     q: eshots,
@@ -47,7 +48,7 @@ export function decodeSnapshot(m) {
       invuln: a[7] / 10, bombT: a[8], continueT: a[9], spectator: a[10] === 1, spawn: a[11],
     })),
     enemies: m.e.map((a) => ({ id: a[0], type: ETYPES[a[1]], x: a[2], y: a[3], hp: a[4], hit: a[5] })),
-    boss: m.b ? { x: m.b[0], y: m.b[1], hp: m.b[2], phase: m.b[3], entering: m.b[4] === 1, hit: m.b[5] } : null,
+    boss: m.b ? { x: m.b[0], y: m.b[1], hp: m.b[2], phase: m.b[3], entering: m.b[4] === 1, hit: m.b[5], kind: BKINDS[m.b[6]] || 'pudding' } : null,
     powerups: m.u.map((a) => ({ kind: UKINDS[a[0]], x: a[1], y: a[2] })),
     shots,
     eshots,
@@ -98,7 +99,7 @@ export function createGuestView() {
       const ba = sb && sa.boss ? sa.boss : null;
       boss = {
         x: ba ? lerp(ba.x, bb.x, k) : bb.x, y: ba ? lerp(ba.y, bb.y, k) : bb.y,
-        hp: bb.hp, maxHp: 100, phase: bb.phase, entering: bb.entering, hitT: bb.hit ? 1 : 0, dead: false,
+        hp: bb.hp, maxHp: 100, phase: bb.phase, entering: bb.entering, hitT: bb.hit ? 1 : 0, dead: false, kind: bb.kind,
       };
     }
 

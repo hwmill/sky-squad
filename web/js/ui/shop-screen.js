@@ -93,7 +93,7 @@ export function openShopScreen(p, { onBuy, onDone }) {
 
 // 클리어 결과 화면 (SHOP.RESULT_SECONDS초 뒤 then())
 export function showStageClear({ round, score, stageCoins, nomiss, best, newBest }, then) {
-  $('scTitle').textContent = `${round}번째 클리어!`;
+  $('scTitle').textContent = `STAGE ${round} 클리어!`;
   $('scScore').textContent = score.toLocaleString('ko-KR');
   $('scCoins').textContent = `얻은 코인 🪙 +${stageCoins.toLocaleString('ko-KR')}`;
   $('scNomiss').textContent = nomiss ? '✨ 노미스 보너스 +50 포함!' : '';
